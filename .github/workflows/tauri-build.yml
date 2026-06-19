@@ -42,9 +42,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          release: ${{ inputs.release || github.ref_name }}
-          tagName: ${{ inputs.release || github.ref_name }}
           
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
