@@ -140,7 +140,7 @@ export default function App() {
     }
   }
 
-  const setStoreValue = async () => {
+  const saveStoreValue = async () => {
     try {
       await invoke('store_set', { 
         name: 'test-store', 
@@ -258,7 +258,7 @@ export default function App() {
           />
         </div>
         <div style={{ 'display': 'flex', 'gap': '1rem' }}>
-          <button onClick={setStoreValue}>Store Value</button>
+          <button onClick={saveStoreValue}>Store Value</button>
           <button onClick={getStoreValue}>Get Value</button>
         </div>
       </section>
