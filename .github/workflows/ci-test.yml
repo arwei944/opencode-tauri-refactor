@@ -1,0 +1,55 @@
+name: CI Test & Lint
+
+on:
+  push:
+    branches: [main, master, dev, develop]
+  pull_request:
+    branches: [main, master, dev, develop]
+
+jobs:
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+          
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Run TypeScript type check
+        run: pnpm typecheck
+        
+      - name: Run lint
+        run: pnpm lint
+        
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "opencode-tauri"
+          
+      - name: Check Rust formatting
+        run: cargo fmt --check
+        
+      - name: Check Rust clippy
+        run: cargo clippy --all-targets -- -D warnings
+        
+      - name: Test Rust code
+        run: cargo test

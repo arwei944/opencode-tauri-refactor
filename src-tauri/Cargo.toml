@@ -1,0 +1,51 @@
+[package]
+name = "opencode-tauri"
+version = "1.17.8"
+description = "OpenCode Desktop - Tauri version (Lightweight AI coding assistant)"
+authors = ["OpenCode Team"]
+edition = "2021"
+rust-version = "1.85"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["devtools", "macos-private-api", "shell-open-api", "tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-store = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-clipboard-manager = "2"
+
+# Core dependencies
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+portable-pty = "0.8"
+log = "0.4"
+env_logger = "0.11"
+rand = "0.8"
+url = "2"
+
+# Platform-specific dependencies
+dirs = "5.0"
+path-absolutize = "1"
+whoami = "1"
+
+# Linux-specific (for WSL terminal handling)
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29", features = ["signal", "unistd"] }
+
+[features]
+# This feature is used for production builds or when a dev server is not specified
+custom-protocol = ["tauri/custom-protocol"]
+# Universal binary for macOS (Intel + Apple Silicon)
+universal = ["tauri/universal"]
+
+[profile.release]
+opt-level = 2
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
