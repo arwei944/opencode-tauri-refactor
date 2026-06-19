@@ -2,20 +2,11 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OpenCode",
   "version": "1.17.8",
-  "identifier": "ai.opencode.desktop",
-  "description": "AI-powered development tool - Tauri version",
-  "authors": ["OpenCode Team"],
-  "license": "MIT",
-  "homepage": "https://opencode.ai",
-  "repository": "https://github.com/anomalyco/opencode",
   "build": {
-    "beforeDevCommand": "pnpm run dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm run build",
-    "frontendDist": "../dist",
-    "backend": {
-      "cargoFeatures": ["default"]
-    }
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [
@@ -32,44 +23,24 @@
         "alwaysOnTop": false,
         "visibleOnAllWorkspaces": false,
         "center": true,
-        "theme": null,
-        "defaultFont": null
+        "theme": null
       }
     ],
     "security": {
-      "csp": null,
-      "isolated": {
-        "explicit": false
-      }
+      "csp": null
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
-    "identifier": "ai.opencode.desktop",
+    "targets": "windows",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
       "icons/icon.ico"
     ],
     "resources": [],
-    "externalBinaries": [],
-    "macOS": {
-      "entitlements": null,
-      "hardenedRuntime": true,
-      "gatekeeper": null,
-      "notarization": null
-    },
     "windows": {
-      "certificate thumbprint": null,
-      "digest algorithm": "sha256",
-      "timestamp url": null
-    },
-    "linux": {
-      "category": "Development",
-      "executableName": "opencode"
+      "digestAlgorithm": "sha256"
     }
   },
   "plugins": {
