@@ -4,8 +4,7 @@
 use std::{
     collections::HashMap,
     env,
-    path::{Path, PathBuf},
-    process,
+    path::Path,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -13,7 +12,7 @@ use std::{
 use log::{debug, error, info, warn};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WindowEvent};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_notification::NotificationExt;

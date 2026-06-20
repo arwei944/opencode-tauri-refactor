@@ -6,8 +6,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use log::{debug, error, info, warn};
-use portable_pty::{ChildKiller, CommandBuilder, NativePtySystem, Pty, PtySize};
+use log::{debug, info};
+use portable_pty::{ChildKiller, CommandBuilder, MasterPty, NativePtySystem, PtySize};
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
@@ -29,7 +29,7 @@ pub struct TerminalConfig {
 #[derive(Debug)]
 pub struct TerminalSession {
     pub id: String,
-    pub pty: Box<dyn Pty + Send>,
+    pub pty: Box<dyn MasterPty + Send>,
     pub config: TerminalConfig,
     pub child_killer: Box<dyn ChildKiller + Send>,
 }
@@ -302,7 +302,6 @@ impl Default for TerminalConfig {
 // Tauri 终端命令
 // ============================================================================
 
-use crate::AppState;
 use tauri::State;
 
 /// 创建新终端会话

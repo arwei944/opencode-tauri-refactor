@@ -7,9 +7,8 @@
 use std::env;
 use std::sync::{Arc, Mutex};
 
-use env_logger;
-use log::{debug, error, info, warn};
-use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+use log::{debug, error, info};
+use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
 // ============================================================================
 // Modules
