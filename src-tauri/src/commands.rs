@@ -200,11 +200,12 @@ pub async fn create_new_window(
     url: Option<String>,
 ) -> Result<(), String> {
     let label = format!("window-{}", rand::random::<u16>());
-    let window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.unwrap_or("/".into())))
-        .title(title.unwrap_or("OpenCode - New Window".to_string()))
-        .inner_size(1280.0, 800.0)
-        .build()
-        .map_err(|e| e.to_string())?;
+    let window =
+        WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.unwrap_or("/".into())))
+            .title(title.unwrap_or("OpenCode - New Window".to_string()))
+            .inner_size(1280.0, 800.0)
+            .build()
+            .map_err(|e| e.to_string())?;
 
     window.show().map_err(|e| e.to_string())?;
     Ok(())
@@ -582,7 +583,11 @@ pub async fn open_link(window: WebviewWindow, url: String) -> Result<(), String>
 }
 
 #[tauri::command]
-pub async fn open_path(window: WebviewWindow, path: String, app: Option<String>) -> Result<(), String> {
+pub async fn open_path(
+    window: WebviewWindow,
+    path: String,
+    app: Option<String>,
+) -> Result<(), String> {
     if let Some(app_name) = app {
         #[cfg(target_os = "macos")]
         {
@@ -616,7 +621,9 @@ pub async fn open_path(window: WebviewWindow, path: String, app: Option<String>)
 }
 
 #[tauri::command]
-pub async fn read_clipboard_image(window: WebviewWindow) -> Result<Option<serde_json::Value>, String> {
+pub async fn read_clipboard_image(
+    window: WebviewWindow,
+) -> Result<Option<serde_json::Value>, String> {
     let image = window
         .clipboard()
         .read_image()

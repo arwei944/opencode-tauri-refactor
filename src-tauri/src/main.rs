@@ -180,7 +180,7 @@ async fn main() {
             Ok(())
         })
         // Global window event handler
-                .on_window_event(|window: &WebviewWindow, event| {
+        .on_window_event(|window: &WebviewWindow, event| {
             handle_global_window_event(window.clone(), event);
         })
         .run(tauri::generate_context!())

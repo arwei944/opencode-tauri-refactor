@@ -147,10 +147,7 @@ impl TerminalManager {
 
     /// 调整终端会话尺寸
     pub async fn resize_session(&self, id: String, size: TerminalSize) -> Result<(), String> {
-        debug!(
-            "调整终端会话尺寸 {} 为 {}x{}",
-            id, size.cols, size.rows
-        );
+        debug!("调整终端会话尺寸 {} 为 {}x{}", id, size.cols, size.rows);
 
         let sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.get(&id) {
