@@ -573,10 +573,7 @@ pub async fn release_picked_files(_token: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn open_link(window: WebviewWindow, url: String) -> Result<(), String> {
-    window
-        .shell()
-        .open(&url, None)
-        .map_err(|e| e.to_string())?;
+    window.shell().open(&url, None).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -621,10 +618,7 @@ pub async fn open_path(
 pub async fn read_clipboard_image(
     window: WebviewWindow,
 ) -> Result<Option<serde_json::Value>, String> {
-    let image = window
-        .clipboard()
-        .read_image()
-        .map_err(|e| e.to_string())?;
+    let image = window.clipboard().read_image().map_err(|e| e.to_string())?;
 
     Ok(image.map(|img| {
         serde_json::json!({
