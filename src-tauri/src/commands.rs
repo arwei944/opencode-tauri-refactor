@@ -205,9 +205,9 @@ pub async fn create_new_window(
         WebviewUrl::App(url.unwrap_or_else(|| "/".into()).into()),
     )
     .title(title.unwrap_or("OpenCode - New Window".to_string()))
-            .inner_size(1280.0, 800.0)
-            .build()
-            .map_err(|e| e.to_string())?;
+    .inner_size(1280.0, 800.0)
+    .build()
+    .map_err(|e| e.to_string())?;
 
     window.show().map_err(|e| e.to_string())?;
     Ok(())
