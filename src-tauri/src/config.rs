@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 // ============================================================================
 
 /// Application configuration structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AppConfig {
     /// Server configuration
     pub server: ServerConfig,
@@ -51,9 +51,9 @@ pub struct WindowConfig {
 }
 
 /// Display configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DisplayConfig {
-    pub backend: Option<String>, // "wayland", "x11", or "auto"
+    pub backend: Option<String>, // "wayland", "x11" 或 "auto"
 }
 
 /// Feature flags
@@ -93,19 +93,6 @@ pub struct UpdaterConfig {
 // Default Configuration
 // ============================================================================
 
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            window: WindowConfig::default(),
-            display: DisplayConfig::default(),
-            features: FeatureFlags::default(),
-            wsl: WslConfig::default(),
-            updater: UpdaterConfig::default(),
-        }
-    }
-}
-
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
@@ -131,12 +118,6 @@ impl Default for WindowConfig {
             pinch_zoom_enabled: false,
             titlebar_theme: "dark".to_string(),
         }
-    }
-}
-
-impl Default for DisplayConfig {
-    fn default() -> Self {
-        Self { backend: None }
     }
 }
 
@@ -176,6 +157,7 @@ impl Default for UpdaterConfig {
 // ============================================================================
 
 /// Manages application configuration
+#[derive(Default)]
 pub struct ConfigManager {
     config: Arc<Mutex<AppConfig>>,
     config_path: PathBuf,
@@ -184,10 +166,7 @@ pub struct ConfigManager {
 impl ConfigManager {
     /// Create a new configuration manager
     pub fn new() -> Self {
-        Self {
-            config: Arc::new(Mutex::new(AppConfig::default())),
-            config_path: PathBuf::new(),
-        }
+        Self::default()
     }
 
     /// Load configuration from file

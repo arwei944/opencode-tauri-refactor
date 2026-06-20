@@ -8,7 +8,7 @@ use std::env;
 use std::sync::{Arc, Mutex};
 
 use log::{debug, error, info};
-use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
+use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
 // ============================================================================
 // Modules
@@ -37,8 +37,10 @@ const DEFAULT_WINDOW_WIDTH: f64 = 1280.0;
 const DEFAULT_WINDOW_HEIGHT: f64 = 800.0;
 const MIN_WINDOW_WIDTH: f64 = 800.0;
 const MIN_WINDOW_HEIGHT: f64 = 600.0;
-const SIDECAR_START_TIMEOUT: u64 = 60_000; // 60 seconds
-const SIDECAR_STOP_TIMEOUT: u64 = 6_000; // 6 seconds
+#[allow(dead_code)]
+const SIDECAR_START_TIMEOUT: u64 = 60_000; // 60 秒
+#[allow(dead_code)]
+const SIDECAR_STOP_TIMEOUT: u64 = 6_000; // 6 秒
 
 // ============================================================================
 // Main Application Entry
@@ -303,13 +305,10 @@ fn handle_window_event(event: WindowEvent, window: &tauri::Window, state: &AppSt
 
 /// Handle global window events
 fn handle_global_window_event(window: tauri::Window, event: WindowEvent) {
-    match event {
-        WindowEvent::CloseRequested { api, .. } => {
-            // For all windows, hide instead of close
-            api.prevent_close();
-            let _ = window.hide();
-        }
-        _ => {}
+    if let WindowEvent::CloseRequested { api, .. } = event {
+        // 对所有窗口，隐藏而非关闭
+        api.prevent_close();
+        let _ = window.hide();
     }
 }
 
@@ -376,16 +375,19 @@ fn format_app_info() -> String {
 }
 
 /// Get application user data directory
+#[allow(dead_code)]
 fn get_user_data_dir() -> std::path::PathBuf {
     config::get_app_data_dir()
 }
 
 /// Get application config directory
+#[allow(dead_code)]
 fn get_config_dir() -> std::path::PathBuf {
     config::get_app_config_dir()
 }
 
 /// Get application cache directory
+#[allow(dead_code)]
 fn get_cache_dir() -> std::path::PathBuf {
     config::get_app_cache_dir()
 }

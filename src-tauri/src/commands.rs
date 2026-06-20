@@ -298,7 +298,7 @@ pub async fn set_background_color(
 
 #[tauri::command]
 pub async fn set_window_title(title: String, window: WebviewWindow) -> Result<(), String> {
-    window.set_title(&title);
+    let _ = window.set_title(&title);
     Ok(())
 }
 
@@ -598,12 +598,14 @@ pub async fn release_picked_files(_token: String) -> Result<(), String> {
 // ============================================================================
 
 #[tauri::command]
+#[allow(deprecated)]
 pub async fn open_link(window: WebviewWindow, url: String) -> Result<(), String> {
     window.shell().open(&url, None).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
+#[allow(deprecated)]
 pub async fn open_path(
     window: WebviewWindow,
     path: String,
@@ -943,6 +945,7 @@ pub async fn wsl_servers_refresh_distros() -> Result<Vec<WslDistroInfo>, String>
 }
 
 #[tauri::command]
+#[allow(deprecated)]
 pub async fn wsl_servers_install_wsl(_window: WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
