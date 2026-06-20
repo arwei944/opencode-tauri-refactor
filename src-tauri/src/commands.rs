@@ -108,7 +108,7 @@ impl Default for UpdaterState {
 // App State
 // ============================================================================
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct AppState {
     pub main_window: Arc<Mutex<Option<WebviewWindow>>>,
     pub sidecar_process: Arc<Mutex<Option<tokio::process::Child>>>,
