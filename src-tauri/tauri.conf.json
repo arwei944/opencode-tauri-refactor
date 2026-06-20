@@ -35,16 +35,5 @@
     ],
     "resources": []
   },
-  "plugins": {
-    "shell": {
-      "open": true
-    },
-    "notification": {
-      "all": true
-    },
-    "clipboard-manager": {
-      "read": true,
-      "write": true
-    }
-  }
+  "plugins": {}
 }
