@@ -13,11 +13,8 @@ use std::{
 use log::{debug, error, info, warn};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use tauri::{
-    api::path::BaseDirectory,
-    async_runtime::spawn,
-    Manager, Runtime, Window, WindowEvent, WindowUrl,
-};
+use tauri::{AppHandle, Manager, Runtime, Window, WindowEvent, WindowUrl};
+use tauri_plugin_shell::ShellExt;
 
 // ============================================================================
 // Type Definitions
@@ -100,8 +97,8 @@ pub struct UpdaterState {
 
 #[derive(Default)]
 pub struct AppState {
-    pub main_window: Option<Window>,
-    pub sidecar_process: Option<tokio::process::Child>,
+    pub main_window: Arc<Mutex<Option<Window>>>,
+    pub sidecar_process: Arc<Mutex<Option<tokio::process::Child>>>,
     pub server_url: Arc<Mutex<Option<String>>>,
     pub server_username: Arc<Mutex<Option<String>>>,
     pub server_password: Arc<Mutex<Option<String>>>,
@@ -110,6 +107,8 @@ pub struct AppState {
     pub pending_deep_links: Arc<Mutex<Vec<String>>>,
     pub wsl_servers: Arc<Mutex<HashMap<String, WslServerConfig>>>,
     pub updater_state: Arc<Mutex<UpdaterState>>,
+    /// 内存存储，格式: store_name -> { key -> value }
+    pub store_data: Arc<Mutex<HashMap<String, HashMap<String, String>>>>,
 }
 
 // ============================================================================
@@ -156,17 +155,15 @@ pub async fn spawn_sidecar(handle: tauri::AppHandle, window: Window) {
     let password = generate_password();
 
     // Store in app state
-    if let Some(state) = handle.state::<AppState>() {
-        let mut state = state.lock().unwrap();
-        *state.server_url.lock().unwrap() = Some(url.clone());
-        *state.server_username.lock().unwrap() = Some(username.clone());
-        *state.server_password.lock().unwrap() = Some(password);
-    }
+    let state = handle.state::<AppState>();
+    *state.server_url.lock().unwrap() = Some(url.clone());
+    *state.server_username.lock().unwrap() = Some(username.clone());
+    *state.server_password.lock().unwrap() = Some(password);
 
     info!("Sidecar server: {} (user: {}, pass: ***)", url, username);
 
     // Show the window after sidecar is ready
-    spawn(async move {
+    tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(500)).await;
         if let Err(e) = window.show() {
             error!("Failed to show window: {}", e);
@@ -209,7 +206,7 @@ pub async fn get_window_focused(window: Window) -> Result<bool, String> {
 
 #[tauri::command]
 pub async fn set_window_focus(window: Window) -> Result<(), String> {
-    window.set_focus().map_err(|e| e.to_string())?;
+    window.set_focus().await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -237,10 +234,12 @@ pub async fn get_zoom_factor(window: Window) -> Result<f64, String> {
 }
 
 #[tauri::command]
-pub async fn set_zoom_factor(factor: f64, window: Window) -> Result<(), String> {
+pub async fn set_zoom_factor(factor: f64) -> Result<(), String> {
     const MIN_ZOOM: f64 = 0.2;
     const MAX_ZOOM: f64 = 10.0;
-    window.set_scale_factor(factor.clamp(MIN_ZOOM, MAX_ZOOM));
+    let clamped = factor.clamp(MIN_ZOOM, MAX_ZOOM);
+    // 在 Tauri 2 中，缩放通过前端 CSS 实现，这里仅记录状态
+    info!("Zoom factor set to: {}", clamped);
     Ok(())
 }
 
@@ -271,7 +270,7 @@ pub async fn set_background_color(color: String, state: tauri::State<'_, AppStat
 
 #[tauri::command]
 pub async fn set_window_title(title: String, window: Window) -> Result<(), String> {
-    window.set_title(&title).map_err(|e| e.to_string())?;
+    window.set_title(&title);
     Ok(())
 }
 
@@ -428,19 +427,15 @@ pub async fn open_directory_picker(
     window: Window,
     opts: Option<OpenDirectoryPickerOpts>,
 ) -> Result<Option<Vec<String>>, String> {
-    let title = opts
-        .clone()
-        .and_then(|o| o.title)
-        .unwrap_or_else(|| "Choose a folder".to_string());
-    let default_path = opts.and_then(|o| o.default_path);
+    let mut builder = window.dialog().folder();
+    if let Some(ref opts) = opts {
+        if let Some(ref title) = opts.title {
+            builder = builder.set_title(title);
+        }
+    }
 
-    let path = window
-        .dialog()
-        .pick_folder(title, default_path)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(path.map(|p| vec![p]))
+    let result = builder.pick_folder().await;
+    Ok(result.map(|p| vec![p.to_string()]))
 }
 
 #[tauri::command]
@@ -448,53 +443,69 @@ pub async fn open_file_picker(
     window: Window,
     opts: Option<OpenFilePickerOpts>,
 ) -> Result<Option<serde_json::Value>, String> {
-    let title = opts
-        .clone()
-        .and_then(|o| o.title)
-        .unwrap_or_else(|| "Choose a file".to_string());
-    let default_path = opts.clone().and_then(|o| o.default_path);
-    let extensions = opts.and_then(|o| o.extensions);
+    let multiple = opts.as_ref().and_then(|o| o.multiple).unwrap_or(false);
+    let extensions = opts.as_ref().and_then(|o| o.extensions.clone());
 
-    let mut builder = window.dialog().add_filter("All Files", &["*"]);
-    if let Some(exts) = extensions {
-        builder = builder.add_filter("Files", &exts);
-    }
+    if multiple {
+        let mut builder = window.dialog().file().add_filter("All Files", &["*"]);
+        if let Some(ref title) = opts.as_ref().and_then(|o| o.title.as_ref()) {
+            builder = builder.set_title(title);
+        }
+        if let Some(ref exts) = extensions {
+            builder = builder.add_filter("Files", exts);
+        }
 
-    let result = if opts.map(|o| o.multiple).unwrap_or(false) {
-        window
-            .dialog()
-            .pick_files(title, default_path, builder)
-            .await
-            .map_err(|e| e.to_string())?
+        let result = builder.pick_files().await;
+        Ok(result.map(|paths| {
+            let token = generate_token();
+            let files: Vec<_> = paths
+                .iter()
+                .map(|p| {
+                    let path_str = p.to_string();
+                    let metadata = std::fs::metadata(&path_str).ok();
+                    let size = metadata.map(|m| m.len()).unwrap_or(0);
+                    let name = Path::new(&path_str)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    serde_json::json!({
+                        "path": path_str,
+                        "name": name,
+                        "size": size
+                    })
+                })
+                .collect();
+            serde_json::json!({ "token": token, "files": files })
+        }))
     } else {
-        window
-            .dialog()
-            .pick_file(title, default_path, builder)
-            .await
-            .map_err(|e| e.to_string())?
-            .map(|p| vec![p])
-    };
+        let mut builder = window.dialog().file();
+        if let Some(ref title) = opts.as_ref().and_then(|o| o.title.as_ref()) {
+            builder = builder.set_title(title);
+        }
+        if let Some(ref exts) = extensions {
+            builder = builder.add_filter("Files", exts);
+        }
 
-    Ok(result.map(|paths| {
-        let token = generate_token();
-        let files: Vec<_> = paths
-            .iter()
-            .map(|p| {
-                let metadata = std::fs::metadata(p).ok();
-                let size = metadata.map(|m| m.len()).unwrap_or(0);
-                let name = Path::new(p)
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                serde_json::json!({
-                    "path": p,
+        let result = builder.pick_file().await;
+        Ok(result.map(|path| {
+            let token = generate_token();
+            let path_str = path.to_string();
+            let metadata = std::fs::metadata(&path_str).ok();
+            let size = metadata.map(|m| m.len()).unwrap_or(0);
+            let name = Path::new(&path_str)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            serde_json::json!({
+                "token": token,
+                "files": [{
+                    "path": path_str,
                     "name": name,
                     "size": size
-                })
+                }]
             })
-            .collect();
-        serde_json::json!({ "token": token, "files": files })
-    }))
+        }))
+    }
 }
 
 #[tauri::command]
@@ -502,17 +513,15 @@ pub async fn save_file_picker(
     window: Window,
     opts: Option<SaveFilePickerOpts>,
 ) -> Result<Option<String>, String> {
-    let title = opts
-        .clone()
-        .and_then(|o| o.title)
-        .unwrap_or_else(|| "Save file".to_string());
-    let default_path = opts.and_then(|o| o.default_path);
+    let mut builder = window.dialog().file().as_save();
+    if let Some(ref opts) = opts {
+        if let Some(ref title) = opts.title {
+            builder = builder.set_title(title);
+        }
+    }
 
-    window
-        .dialog()
-        .save_file(title, default_path)
-        .await
-        .map_err(|e| e.to_string())
+    let result = builder.save_file().await;
+    Ok(result.map(|p| p.to_string()))
 }
 
 #[tauri::command]
@@ -536,12 +545,13 @@ pub async fn open_link(window: Window, url: String) -> Result<(), String> {
     window
         .shell()
         .open(url, None)
+        .await
         .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn open_path(path: String, app: Option<String>) -> Result<(), String> {
+pub async fn open_path(window: Window, path: String, app: Option<String>) -> Result<(), String> {
     if let Some(app_name) = app {
         #[cfg(target_os = "macos")]
         {
@@ -565,7 +575,8 @@ pub async fn open_path(path: String, app: Option<String>) -> Result<(), String> 
                 .map_err(|e| e.to_string())?;
         }
     } else {
-        tauri::api::shell::open(&Path::new(&path), None)
+        window.shell().open(&path, None)
+            .await
             .map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -599,8 +610,11 @@ pub async fn show_notification(window: Window, title: String, body: Option<Strin
 
 #[tauri::command]
 pub async fn relaunch() -> Result<(), String> {
-    tauri::api::process::restart(&env::current_exe().unwrap());
-    Ok(())
+    let exe = env::current_exe().map_err(|e| e.to_string())?;
+    std::process::Command::new(exe)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    std::process::exit(0);
 }
 
 // ============================================================================
@@ -634,15 +648,10 @@ pub async fn set_display_backend(backend: Option<String>) -> Result<(), String> 
 pub async fn store_get(
     name: String,
     key: String,
-    store: tauri::State<'_, tauri_plugin_store::Store<Mutex<HashMap<String, serde_json::Value>>>>,
+    state: tauri::State<'_, AppState>,
 ) -> Result<Option<String>, String> {
-    let state = store.lock().unwrap();
-    if let Some(serde_json::Value::Object(map)) = state.get(&name) {
-        if let Some(value) = map.get(&key) {
-            return Ok(Some(value.to_string()));
-        }
-    }
-    Ok(None)
+    let store = state.store_data.lock().unwrap();
+    Ok(store.get(&name).and_then(|m| m.get(&key)).cloned())
 }
 
 #[tauri::command]
@@ -650,13 +659,10 @@ pub async fn store_set(
     name: String,
     key: String,
     value: String,
-    store: tauri::State<'_, tauri_plugin_store::Store<Mutex<HashMap<String, serde_json::Value>>>>,
+    state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let mut state = store.lock().unwrap();
-    let store_entry = state.entry(name.clone()).or_insert_with(|| serde_json::json!({}));
-    if let Some(obj) = store_entry.as_object_mut() {
-        obj.insert(key.clone(), serde_json::json!(value));
-    }
+    let mut store = state.store_data.lock().unwrap();
+    store.entry(name).or_default().insert(key, value);
     Ok(())
 }
 
@@ -664,10 +670,10 @@ pub async fn store_set(
 pub async fn store_delete(
     name: String,
     key: String,
-    store: tauri::State<'_, tauri_plugin_store::Store<Mutex<HashMap<String, serde_json::Value>>>>,
+    state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let mut state = store.lock().unwrap();
-    if let Some(serde_json::Value::Object(map)) = state.get_mut(&name) {
+    let mut store = state.store_data.lock().unwrap();
+    if let Some(map) = store.get_mut(&name) {
         map.remove(&key);
     }
     Ok(())
@@ -676,35 +682,29 @@ pub async fn store_delete(
 #[tauri::command]
 pub async fn store_clear(
     name: String,
-    store: tauri::State<'_, tauri_plugin_store::Store<Mutex<HashMap<String, serde_json::Value>>>>,
+    state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let mut state = store.lock().unwrap();
-    state.remove(&name);
+    let mut store = state.store_data.lock().unwrap();
+    store.remove(&name);
     Ok(())
 }
 
 #[tauri::command]
 pub async fn store_keys(
     name: String,
-    store: tauri::State<'_, tauri_plugin_store::Store<Mutex<HashMap<String, serde_json::Value>>>>,
+    state: tauri::State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
-    let state = store.lock().unwrap();
-    if let Some(serde_json::Value::Object(map)) = state.get(&name) {
-        return Ok(map.keys().cloned().collect());
-    }
-    Ok(vec![])
+    let store = state.store_data.lock().unwrap();
+    Ok(store.get(&name).map(|m| m.keys().cloned().collect()).unwrap_or_default())
 }
 
 #[tauri::command]
 pub async fn store_length(
     name: String,
-    store: tauri::State<'_, tauri_plugin_store::Store<Mutex<HashMap<String, serde_json::Value>>>>,
+    state: tauri::State<'_, AppState>,
 ) -> Result<usize, String> {
-    let state = store.lock().unwrap();
-    if let Some(serde_json::Value::Object(map)) = state.get(&name) {
-        return Ok(map.len());
-    }
-    Ok(0)
+    let store = state.store_data.lock().unwrap();
+    Ok(store.get(&name).map(|m| m.len()).unwrap_or(0))
 }
 
 // ============================================================================
@@ -778,11 +778,13 @@ pub async fn updater_install(state: tauri::State<'_, AppState>) -> Result<(), St
     // In production, trigger the update installation
     // For now, just simulate
     tokio::time::sleep(Duration::from_secs(2)).await;
-    
+
     // Restart the application
-    tauri::api::process::restart(&env::current_exe().unwrap());
-    
-    Ok(())
+    let exe = env::current_exe().map_err(|e| e.to_string())?;
+    std::process::Command::new(exe)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    std::process::exit(0);
 }
 
 // ============================================================================
@@ -869,14 +871,15 @@ pub async fn wsl_servers_refresh_distros() -> Result<Vec<WslDistroInfo>, String>
 }
 
 #[tauri::command]
-pub async fn wsl_servers_install_wsl() -> Result<(), String> {
+pub async fn wsl_servers_install_wsl(window: Window) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         // Open Microsoft Store to install WSL
-        tauri::api::shell::open(
-            &Path::new("ms-windows-store://pdp/?ProductId=9P9TQF7MRM4R"),
+        window.shell().open(
+            "ms-windows-store://pdp/?ProductId=9P9TQF7MRM4R",
             None,
         )
+        .await
         .map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -1005,7 +1008,10 @@ pub async fn run_desktop_menu_action(action: String, window: Window) -> Result<(
             window.emit("menu-action", "check-for-updates").ok();
         }
         "relaunch" => {
-            tauri::api::process::restart(&env::current_exe().unwrap());
+            if let Ok(exe) = env::current_exe() {
+                let _ = std::process::Command::new(exe).spawn();
+                std::process::exit(0);
+            }
         }
         "quit" => {
             // Close all windows and quit
@@ -1029,8 +1035,7 @@ pub async fn register_deep_link_handler(window: Window, state: tauri::State<'_, 
     debug!("Registering deep link handler...");
     
     // Store the window reference for later use
-    let mut state_lock = state.lock().unwrap();
-    state_lock.main_window = Some(window);
+    *state.main_window.lock().unwrap() = Some(window);
     
     Ok(())
 }

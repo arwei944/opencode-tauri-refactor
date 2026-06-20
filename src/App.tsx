@@ -1,6 +1,6 @@
 import { createSignal, onMount } from 'solid-js'
 import { invoke } from '@tauri-apps/api/core'
-import { open } from '@tauri-apps/api/shell'
+import { open } from '@tauri-apps/plugin-shell'
 import './index.css'
 
 export default function App() {

@@ -297,7 +297,7 @@ impl Default for TerminalConfig {
 // ============================================================================
 
 use tauri::State;
-use commands::AppState;
+use crate::AppState;
 
 /// Create a new terminal session
 #[tauri::command]

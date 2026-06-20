@@ -5,8 +5,8 @@
 
 import { createSignal, onCleanup } from 'solid-js'
 import { invoke } from '@tauri-apps/api/core'
-import { open } from '@tauri-apps/api/shell'
-import { save, open as openDialog } from '@tauri-apps/api/dialog'
+import { open } from '@tauri-apps/plugin-shell'
+import { save, open as openDialog } from '@tauri-apps/plugin-dialog'
 import type {
   ServerReadyData,
   TitlebarTheme,
@@ -26,13 +26,19 @@ export interface UseElectronApiReturn {
 export function useElectronApi(_options?: UseElectronApiOptions): UseElectronApiReturn {
   const [isReady, setIsReady] = createSignal(false)
 
-  // State for subscriptions
-  const [updaterState, setUpdaterState] = createSignal<any>(null)
-  const [wslServersState, setWslServersState] = createSignal<any>(null)
-  const [menuCommandHandler, setMenuCommandHandler] = createSignal<((id: string) => void) | null>(null)
-  const [deepLinkHandler, setDeepLinkHandler] = createSignal<((urls: string[]) => void) | null>(null)
-  const [pinchZoomHandler, setPinchZoomHandler] = createSignal<((enabled: boolean) => void) | null>(null)
-  const [zoomFactorHandler, setZoomFactorHandler] = createSignal<((factor: number) => void) | null>(null)
+  // 订阅状态（为未来功能预留）
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_updaterState, _setUpdaterState] = createSignal<any>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_wslServersState, _setWslServersState] = createSignal<any>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_menuCommandHandler, setMenuCommandHandler] = createSignal<((id: string) => void) | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_deepLinkHandler, setDeepLinkHandler] = createSignal<((urls: string[]) => void) | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_pinchZoomHandler, setPinchZoomHandler] = createSignal<((enabled: boolean) => void) | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_zoomFactorHandler, setZoomFactorHandler] = createSignal<((factor: number) => void) | null>(null)
 
   // Implement the API
   const api: Partial<ElectronAPI> = {
@@ -297,7 +303,7 @@ export function useElectronApi(_options?: UseElectronApiOptions): UseElectronApi
       getState: async () => {
         return {}
       },
-      subscribe: async (cb) => {
+      subscribe: async (_cb: (event: any) => void) => {
         // Stub
         return () => {}
       },
@@ -322,7 +328,7 @@ export function useElectronApi(_options?: UseElectronApiOptions): UseElectronApi
 
     // Updater (stub implementation)
     updater: {
-      subscribe: async (cb) => {
+      subscribe: async (_cb: (state: any) => void) => {
         // Stub - in real implementation, we would use Tauri's updater or custom solution
         return () => {}
       },
@@ -334,9 +340,9 @@ export function useElectronApi(_options?: UseElectronApiOptions): UseElectronApi
 
     // getPathForFile implementation
     getPathForFile: (file: File) => {
-      // Tauri doesn't have direct equivalent, but we can use the file's path
-      // This is a simplified implementation
-      return file.path || file.name
+      // Tauri 没有直接的等价物，用类型断言获取可能存在的 path 属性
+      // 在 Electron 中 File 对象有 path 属性，Tauri 中需要通过对话框获取
+      return (file as any).path || file.name
     },
 
     // readPickedFile and releasePickedFiles

@@ -10,9 +10,6 @@ export default defineConfig({
   build: {
     target: 'esnext',
     outDir: 'dist',
-    rollupOptions: {
-      external: ['@tauri-apps/api', '@tauri-apps/api/core', '@tauri-apps/api/shell']
-    }
   },
   clearScreen: false,
 })

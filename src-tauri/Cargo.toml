@@ -10,11 +10,10 @@ rust-version = "1.85"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["devtools", "macos-private-api", "shell-open-api", "tray-icon"] }
+tauri = { version = "2", features = ["devtools", "macos-private-api", "tray-icon"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
-tauri-plugin-store = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-clipboard-manager = "2"
 
@@ -35,13 +34,11 @@ whoami = "1"
 
 # Linux-specific (for WSL terminal handling)
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.29", features = ["signal", "unistd"] }
+nix = { version = "0.29", features = ["signal", "feature"] }
 
 [features]
 # This feature is used for production builds or when a dev server is not specified
 custom-protocol = ["tauri/custom-protocol"]
-# Universal binary for macOS (Intel + Apple Silicon)
-universal = ["tauri/universal"]
 
 [profile.release]
 opt-level = 2

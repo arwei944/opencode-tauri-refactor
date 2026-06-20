@@ -10,7 +10,6 @@ use std::sync::{Arc, Mutex};
 use env_logger;
 use log::{debug, error, info, warn};
 use tauri::{
-    async_runtime::spawn,
     Manager, Runtime, Window, WindowBuilder, WindowEvent, WindowUrl,
 };
 
@@ -30,21 +29,6 @@ pub use terminal::*;
 // ============================================================================
 // Application State
 // ============================================================================
-
-/// Shared application state
-#[derive(Default)]
-pub struct AppState {
-    pub main_window: Option<Window>,
-    pub sidecar_process: Option<tokio::process::Child>,
-    pub server_url: Arc<Mutex<Option<String>>>,
-    pub server_username: Arc<Mutex<Option<String>>>,
-    pub server_password: Arc<Mutex<Option<String>>>,
-    pub background_color: Arc<Mutex<Option<String>>>,
-    pub pinch_zoom_enabled: Arc<Mutex<bool>>,
-    pub pending_deep_links: Arc<Mutex<Vec<String>>>,
-    pub wsl_servers: Arc<Mutex<std::collections::HashMap<String, commands::WslServerConfig>>>,
-    pub updater_state: Arc<Mutex<commands::UpdaterState>>,
-}
 
 // ============================================================================
 // Constants
@@ -89,7 +73,6 @@ async fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         // Manage shared state
@@ -200,10 +183,8 @@ async fn main() {
             let window = create_main_window(app)?;
 
             // Store window reference in state
-            if let Some(state) = app.state::<AppState>() {
-                let mut state_lock = state.lock().unwrap();
-                state_lock.main_window = Some(window.clone());
-            }
+            let state = app.state::<AppState>();
+            *state.main_window.lock().unwrap() = Some(window.clone());
 
             // Set up window event handlers
             setup_window_events(app, window.clone())?;
@@ -244,6 +225,7 @@ fn create_app_state() -> AppState {
             version: None,
             progress: None,
         })),
+        store_data: Arc::new(Mutex::new(std::collections::HashMap::new())),
     }
 }
 
@@ -290,7 +272,7 @@ fn spawn_sidecar_server(handle: tauri::AppHandle, window: Window) {
     // 4. Handle lifecycle events
 
     // For now, use mock implementation
-    spawn(async move {
+    tokio::spawn(async move {
         commands::spawn_sidecar(handle, window).await;
     });
 }
@@ -311,11 +293,12 @@ fn handle_window_event(event: WindowEvent, window: &Window, state: &tauri::State
         }
         WindowEvent::Destroyed => {
             info!("Window destroyed");
-            // Clean up state
-            let mut state_lock = state.lock().unwrap();
-            if let Some(main_win) = &state_lock.main_window {
-                if main_win == window {
-                    state_lock.main_window = None;
+            // Clean up state - compare window references to clear main window
+            let main_win = state.main_window.lock().unwrap();
+            if let Some(ref main) = *main_win {
+                if &main == window {
+                    drop(main_win);
+                    *state.main_window.lock().unwrap() = None;
                 }
             }
         }
