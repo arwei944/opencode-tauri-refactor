@@ -3,11 +3,12 @@
 
 use std::{
     collections::HashMap,
+    io::{Read, Write},
     sync::{Arc, Mutex},
 };
 
 use log::{debug, info};
-use portable_pty::{ChildKiller, CommandBuilder, MasterPty, NativePtySystem, PtySize};
+use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, PtySystem, SlavePty};
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
@@ -26,12 +27,21 @@ pub struct TerminalConfig {
 }
 
 /// 终端会话信息
-#[derive(Debug)]
 pub struct TerminalSession {
     pub id: String,
-    pub pty: Box<dyn MasterPty + Send>,
+    pub master: Box<dyn MasterPty + Send>,
+    pub slave: Box<dyn SlavePty + Send>,
     pub config: TerminalConfig,
-    pub child_killer: Box<dyn ChildKiller + Send>,
+    pub child_killer: Box<dyn ChildKiller + Send + Sync>,
+}
+
+impl std::fmt::Debug for TerminalSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TerminalSession")
+            .field("id", &self.id)
+            .field("config", &self.config)
+            .finish()
+    }
 }
 
 /// 终端输出事件
@@ -56,7 +66,7 @@ pub struct TerminalSize {
 pub struct TerminalManager {
     sessions: Arc<Mutex<HashMap<String, TerminalSession>>>,
     next_id: Arc<Mutex<u64>>,
-    pty_system: NativePtySystem,
+    pty_system: portable_pty::PtySystem,
 }
 
 impl TerminalManager {
@@ -104,23 +114,25 @@ impl TerminalManager {
             pixel_height: 0,
         };
 
-        // 创建 PTY
-        let (pty, child_pty) = self
+        // 创建 PTY 对
+        let pair = self
             .pty_system
             .open_pty(&size)
             .map_err(|e| format!("打开 PTY 失败: {}", e))?;
 
-        // 生成进程
-        let (child_killer, _) = cmd
-            .spawn_pty(child_pty)
+        // 在从 PTY 中生成进程
+        let child = pair
+            .slave
+            .spawn_command(cmd)
             .map_err(|e| format!("生成进程失败: {}", e))?;
 
         // 创建会话
         let session = TerminalSession {
             id: id.clone(),
-            pty,
+            master: pair.master,
+            slave: pair.slave,
             config,
-            child_killer,
+            child_killer: child,
         };
 
         // 存储会话
@@ -134,9 +146,9 @@ impl TerminalManager {
         info!("销毁终端会话: {}", id);
 
         let mut sessions = self.sessions.lock().unwrap();
-        if let Some(session) = sessions.remove(&id) {
+        if let Some(mut session) = sessions.remove(&id) {
             // 杀死进程（同步）
-            let _ = session.child_killer.kill();
+            session.child_killer.kill().map_err(|e| e.to_string())?;
             // 关闭 PTY（drop 自动处理）
 
             info!("终端会话已销毁: {}", id);
@@ -147,7 +159,10 @@ impl TerminalManager {
 
     /// 调整终端会话尺寸
     pub async fn resize_session(&self, id: String, size: TerminalSize) -> Result<(), String> {
-        debug!("调整终端会话尺寸 {} 为 {}x{}", id, size.cols, size.rows);
+        debug!(
+            "调整终端会话尺寸 {} 为 {}x{}",
+            id, size.cols, size.rows
+        );
 
         let sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.get(&id) {
@@ -159,11 +174,9 @@ impl TerminalManager {
             };
 
             session
-                .pty
+                .master
                 .resize(pty_size)
                 .map_err(|e| format!("调整 PTY 尺寸失败: {}", e))?;
-
-            // 进程 PID 无法直接获取，跳过 SIGWINCH
         }
 
         Ok(())
@@ -175,10 +188,15 @@ impl TerminalManager {
 
         let sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.get(&id) {
-            session
-                .pty
-                .write(data.as_bytes())
+            let mut writer = session
+                .master
+                .take_writer()
+                .map_err(|e| format!("获取写入器失败: {}", e))?;
+
+            writer
+                .write_all(data.as_bytes())
                 .map_err(|e| format!("写入 PTY 失败: {}", e))?;
+            writer.flush().map_err(|e| format!("刷新失败: {}", e))?;
         }
 
         Ok(())
@@ -188,9 +206,13 @@ impl TerminalManager {
     pub async fn read_from_session(&self, id: String) -> Result<String, String> {
         let sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.get(&id) {
+            let mut reader = session
+                .master
+                .try_clone_reader()
+                .map_err(|e| format!("克隆读取器失败: {}", e))?;
+
             let mut buffer = vec![0u8; 4096];
-            let n = session
-                .pty
+            let n = reader
                 .read(&mut buffer)
                 .map_err(|e| format!("读取 PTY 失败: {}", e))?;
 
