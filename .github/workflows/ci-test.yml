@@ -46,6 +46,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: "opencode-tauri"
+          workspaces: "src-tauri"
           
       - name: Check Rust formatting
         working-directory: src-tauri
