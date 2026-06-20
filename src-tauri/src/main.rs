@@ -8,7 +8,7 @@ use std::env;
 use std::sync::{Arc, Mutex};
 
 use log::{debug, error, info};
-use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+use tauri::{Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
 
 // ============================================================================
 // Modules
@@ -179,8 +179,8 @@ async fn main() {
             Ok(())
         })
         // Global window event handler
-        .on_window_event(|window: &WebviewWindow, event| {
-            handle_global_window_event(window.clone(), event);
+        .on_window_event(|window: &tauri::Window, event: &WindowEvent| {
+            handle_global_window_event(window.clone(), event.clone());
         })
         .run(tauri::generate_context!())
         .expect("Error while running Tauri application");
@@ -226,11 +226,11 @@ fn setup_window_events(
     app: &mut tauri::App,
     window: WebviewWindow,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let window_clone = window.clone();
     let state_clone = app.state::<AppState>().clone();
+    let window_ref = window.clone();
 
     window.on_window_event(move |event| {
-        handle_window_event(event, &window_clone, &state_clone);
+        handle_window_event(event.clone(), &window_ref, &state_clone);
     });
 
     Ok(())
@@ -257,7 +257,7 @@ fn spawn_sidecar_server(handle: tauri::AppHandle, window: WebviewWindow) {
 // ============================================================================
 
 /// Handle window-specific events
-fn handle_window_event(event: WindowEvent, window: &WebviewWindow, state: &tauri::State<AppState>) {
+fn handle_window_event(event: WindowEvent, window: &tauri::Window, state: &tauri::State<AppState>) {
     match event {
         WindowEvent::CloseRequested { api, .. } => {
             // Prevent window from closing, hide instead (Electron-like behavior)
@@ -271,7 +271,7 @@ fn handle_window_event(event: WindowEvent, window: &WebviewWindow, state: &tauri
             // Clean up state - compare window references to clear main window
             let main_win = state.main_window.lock().unwrap();
             if let Some(ref main) = *main_win {
-                if &main == window {
+                if main.label() == window.label() {
                     drop(main_win);
                     *state.main_window.lock().unwrap() = None;
                 }
@@ -289,6 +289,7 @@ fn handle_window_event(event: WindowEvent, window: &WebviewWindow, state: &tauri
         WindowEvent::ScaleFactorChanged {
             scale_factor,
             new_inner_size,
+            ..
         } => {
             debug!(
                 "Scale factor changed: {}, new size: {}x{}",
@@ -300,7 +301,7 @@ fn handle_window_event(event: WindowEvent, window: &WebviewWindow, state: &tauri
 }
 
 /// Handle global window events
-fn handle_global_window_event(window: WebviewWindow, event: WindowEvent) {
+fn handle_global_window_event(window: tauri::Window, event: WindowEvent) {
     match event {
         WindowEvent::CloseRequested { api, .. } => {
             // For all windows, hide instead of close
