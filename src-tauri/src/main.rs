@@ -230,7 +230,7 @@ fn setup_window_events(
     let w = window.clone();
 
     window.on_window_event(move |event| {
-        handle_window_event(event.clone(), w.as_ref().as_ref(), &state_clone);
+        handle_window_event(event.clone(), w.as_ref().window(), &state_clone);
     });
 
     Ok(())

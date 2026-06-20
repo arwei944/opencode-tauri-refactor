@@ -119,7 +119,7 @@ impl TerminalManager {
             .pty_system
             .lock()
             .map_err(|e| format!("PTY 系统锁被污染: {}", e))?
-            .openpty(&size)
+            .openpty(size)
             .map_err(|e| format!("打开 PTY 失败: {}", e))?;
 
         // 在从 PTY 中生成进程
