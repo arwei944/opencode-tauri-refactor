@@ -274,7 +274,10 @@ pub async fn set_pinch_zoom_enabled(
 }
 
 #[tauri::command]
-pub async fn set_titlebar_theme(theme: TitlebarTheme, _window: WebviewWindow) -> Result<(), String> {
+pub async fn set_titlebar_theme(
+    theme: TitlebarTheme,
+    _window: WebviewWindow,
+) -> Result<(), String> {
     // In Tauri, we would customize window decorations
     // For now, just store the preference
     debug!("Titlebar theme set to: {:?}", theme.mode);
