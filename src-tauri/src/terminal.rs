@@ -1,5 +1,5 @@
-//! Terminal Integration Module
-//! This module provides terminal/PTY functionality for OpenCode Tauri.
+//! 终端集成模块
+//! 为 OpenCode Tauri 提供终端/PTY 功能。
 
 use std::{
     collections::HashMap,
@@ -7,15 +7,14 @@ use std::{
 };
 
 use log::{debug, error, info, warn};
-use portable_pty::{CommandBuilder, NativePtySystem, Pty, PtySize};
+use portable_pty::{ChildKiller, CommandBuilder, NativePtySystem, Pty, PtySize};
 use serde::{Deserialize, Serialize};
-use tauri::Window;
 
 // ============================================================================
-// Types
+// 类型定义
 // ============================================================================
 
-/// Terminal session configuration
+/// 终端会话配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalConfig {
     pub id: String,
@@ -26,23 +25,23 @@ pub struct TerminalConfig {
     pub env: HashMap<String, String>,
 }
 
-/// Terminal session information
-#[derive(Debug, Clone)]
+/// 终端会话信息
+#[derive(Debug)]
 pub struct TerminalSession {
     pub id: String,
-    pub pty: Pty,
+    pub pty: Box<dyn Pty + Send>,
     pub config: TerminalConfig,
-    pub process: std::process::Child,
+    pub child_killer: Box<dyn ChildKiller + Send>,
 }
 
-/// Terminal output event
+/// 终端输出事件
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalOutput {
     pub id: String,
     pub data: String,
 }
 
-/// Terminal size
+/// 终端尺寸
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalSize {
     pub cols: u16,
@@ -50,10 +49,10 @@ pub struct TerminalSize {
 }
 
 // ============================================================================
-// Terminal Manager
+// 终端管理器
 // ============================================================================
 
-/// Manages terminal sessions
+/// 管理终端会话
 pub struct TerminalManager {
     sessions: Arc<Mutex<HashMap<String, TerminalSession>>>,
     next_id: Arc<Mutex<u64>>,
@@ -61,7 +60,7 @@ pub struct TerminalManager {
 }
 
 impl TerminalManager {
-    /// Create a new terminal manager
+    /// 创建新的终端管理器
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
@@ -70,7 +69,7 @@ impl TerminalManager {
         }
     }
 
-    /// Create a new terminal session
+    /// 创建新的终端会话
     pub async fn create_session(&self, config: TerminalConfig) -> Result<String, String> {
         let id = {
             let mut next_id = self.next_id.lock().unwrap();
@@ -79,124 +78,116 @@ impl TerminalManager {
             id.to_string()
         };
 
-        info!("Creating terminal session: {}", id);
+        info!("创建终端会话: {}", id);
 
-        // Resolve shell path
+        // 解析 shell 路径
         let shell = self.resolve_shell(&config.shell)?;
 
-        // Build command
+        // 构建命令
         let mut cmd = CommandBuilder::new(shell);
 
-        // Set working directory
+        // 设置工作目录
         if let Some(cwd) = &config.cwd {
             cmd.cwd(cwd);
         }
 
-        // Set environment variables
+        // 设置环境变量
         for (key, value) in &config.env {
             cmd.env(key, value);
         }
 
-        // Set terminal size
+        // 设置终端尺寸
         let size = PtySize {
-            cols: config.cols,
             rows: config.rows,
+            cols: config.cols,
+            pixel_width: 0,
+            pixel_height: 0,
         };
 
-        // Create PTY
-        let pty = self
+        // 创建 PTY
+        let (pty, child_pty) = self
             .pty_system
             .open_pty(&size)
-            .map_err(|e| format!("Failed to open PTY: {}", e))?;
+            .map_err(|e| format!("打开 PTY 失败: {}", e))?;
 
-        // Spawn process
-        let process = cmd
-            .spawn_pty(pty.try_clone()?)
-            .map_err(|e| format!("Failed to spawn process: {}", e))?;
+        // 生成进程
+        let (child_killer, _) = cmd
+            .spawn_pty(child_pty)
+            .map_err(|e| format!("生成进程失败: {}", e))?;
 
-        // Create session
+        // 创建会话
         let session = TerminalSession {
             id: id.clone(),
             pty,
             config,
-            process,
+            child_killer,
         };
 
-        // Store session
+        // 存储会话
         self.sessions.lock().unwrap().insert(id.clone(), session);
 
         Ok(id)
     }
 
-    /// Destroy a terminal session
+    /// 销毁终端会话
     pub async fn destroy_session(&self, id: String) -> Result<(), String> {
-        info!("Destroying terminal session: {}", id);
+        info!("销毁终端会话: {}", id);
 
         let mut sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.remove(&id) {
-            // Kill the process
-            session.process.kill().await.map_err(|e| e.to_string())?;
+            // 杀死进程（同步）
+            let _ = session.child_killer.kill();
+            // 关闭 PTY（drop 自动处理）
 
-            // Close PTY
-            drop(session.pty);
-
-            info!("Terminal session destroyed: {}", id);
+            info!("终端会话已销毁: {}", id);
         }
 
         Ok(())
     }
 
-    /// Resize a terminal session
+    /// 调整终端会话尺寸
     pub async fn resize_session(&self, id: String, size: TerminalSize) -> Result<(), String> {
         debug!(
-            "Resizing terminal session {} to {}x{}",
+            "调整终端会话尺寸 {} 为 {}x{}",
             id, size.cols, size.rows
         );
 
         let sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.get(&id) {
             let pty_size = PtySize {
-                cols: size.cols,
                 rows: size.rows,
+                cols: size.cols,
+                pixel_width: 0,
+                pixel_height: 0,
             };
 
             session
                 .pty
                 .resize(pty_size)
-                .map_err(|e| format!("Failed to resize PTY: {}", e))?;
+                .map_err(|e| format!("调整 PTY 尺寸失败: {}", e))?;
 
-            // Also send SIGWINCH to the process if on Unix
-            #[cfg(unix)]
-            {
-                use nix::sys::signal::{kill, Signal};
-                use nix::unistd::Pid;
-
-                let pid = Pid::from_raw(session.process.id() as i32);
-                if let Err(e) = kill(pid, Signal::SIGWINCH) {
-                    warn!("Failed to send SIGWINCH: {}", e);
-                }
-            }
+            // 进程 PID 无法直接获取，跳过 SIGWINCH
         }
 
         Ok(())
     }
 
-    /// Write data to a terminal session
+    /// 向终端会话写入数据
     pub async fn write_to_session(&self, id: String, data: String) -> Result<(), String> {
-        debug!("Writing to terminal session {}: {}", id, data);
+        debug!("向终端会话 {} 写入数据: {}", id, data);
 
         let sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.get(&id) {
             session
                 .pty
                 .write(data.as_bytes())
-                .map_err(|e| format!("Failed to write to PTY: {}", e))?;
+                .map_err(|e| format!("写入 PTY 失败: {}", e))?;
         }
 
         Ok(())
     }
 
-    /// Read from a terminal session
+    /// 从终端会话读取数据
     pub async fn read_from_session(&self, id: String) -> Result<String, String> {
         let sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.get(&id) {
@@ -204,7 +195,7 @@ impl TerminalManager {
             let n = session
                 .pty
                 .read(&mut buffer)
-                .map_err(|e| format!("Failed to read from PTY: {}", e))?;
+                .map_err(|e| format!("读取 PTY 失败: {}", e))?;
 
             if n > 0 {
                 buffer.truncate(n);
@@ -215,23 +206,23 @@ impl TerminalManager {
         Ok(String::new())
     }
 
-    /// Get list of all terminal sessions
+    /// 获取所有终端会话列表
     pub async fn list_sessions(&self) -> Result<Vec<String>, String> {
         let sessions = self.sessions.lock().unwrap();
         Ok(sessions.keys().cloned().collect())
     }
 
-    /// Get terminal session info
+    /// 获取终端会话信息
     pub async fn get_session_info(&self, id: String) -> Result<TerminalConfig, String> {
         let sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.get(&id) {
             Ok(session.config.clone())
         } else {
-            Err(format!("Terminal session not found: {}", id))
+            Err(format!("未找到终端会话: {}", id))
         }
     }
 
-    /// Resolve shell path based on platform
+    /// 基于平台解析 shell 路径
     fn resolve_shell(&self, shell: &str) -> Result<String, String> {
         if !shell.is_empty() {
             return Ok(shell.to_string());
@@ -239,12 +230,12 @@ impl TerminalManager {
 
         #[cfg(target_os = "windows")]
         {
-            // Try to find a suitable shell
+            // 尝试找到合适的 shell
             if let Ok(path) = std::env::var("COMSPEC") {
                 return Ok(path);
             }
 
-            // Try PowerShell
+            // 尝试 PowerShell
             if std::path::Path::new(
                 "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
             )
@@ -255,13 +246,13 @@ impl TerminalManager {
                 );
             }
 
-            // Fall back to cmd
+            // 回退到 cmd
             Ok("cmd.exe".to_string())
         }
 
         #[cfg(target_os = "macos")]
         {
-            // Try to find a shell
+            // 尝试找到 shell
             let shells = ["/bin/zsh", "/bin/bash", "/bin/sh"];
             for shell in shells.iter() {
                 if std::path::Path::new(shell).exists() {
@@ -273,7 +264,7 @@ impl TerminalManager {
 
         #[cfg(target_os = "linux")]
         {
-            // Try to find a shell
+            // 尝试找到 shell
             let user_shell = std::env::var("SHELL").ok();
             if let Some(shell) = user_shell {
                 if std::path::Path::new(&shell).exists() {
@@ -281,7 +272,7 @@ impl TerminalManager {
                 }
             }
 
-            // Try common shells
+            // 尝试常见的 shell
             let shells = ["/bin/bash", "/bin/sh", "/usr/bin/bash", "/usr/bin/sh"];
             for shell in shells.iter() {
                 if std::path::Path::new(shell).exists() {
@@ -294,7 +285,7 @@ impl TerminalManager {
 }
 
 // ============================================================================
-// Default Terminal Configuration
+// 默认终端配置
 // ============================================================================
 
 impl Default for TerminalConfig {
@@ -311,13 +302,13 @@ impl Default for TerminalConfig {
 }
 
 // ============================================================================
-// Terminal Commands (for Tauri)
+// Tauri 终端命令
 // ============================================================================
 
 use crate::AppState;
 use tauri::State;
 
-/// Create a new terminal session
+/// 创建新终端会话
 #[tauri::command]
 pub async fn terminal_create(
     config: TerminalConfig,
@@ -326,7 +317,7 @@ pub async fn terminal_create(
     terminal_manager.create_session(config).await
 }
 
-/// Destroy a terminal session
+/// 销毁终端会话
 #[tauri::command]
 pub async fn terminal_destroy(
     id: String,
@@ -335,7 +326,7 @@ pub async fn terminal_destroy(
     terminal_manager.destroy_session(id).await
 }
 
-/// Resize a terminal session
+/// 调整终端会话尺寸
 #[tauri::command]
 pub async fn terminal_resize(
     id: String,
@@ -345,7 +336,7 @@ pub async fn terminal_resize(
     terminal_manager.resize_session(id, size).await
 }
 
-/// Write to a terminal session
+/// 向终端写入数据
 #[tauri::command]
 pub async fn terminal_write(
     id: String,
@@ -355,7 +346,7 @@ pub async fn terminal_write(
     terminal_manager.write_to_session(id, data).await
 }
 
-/// Read from a terminal session
+/// 从终端读取数据
 #[tauri::command]
 pub async fn terminal_read(
     id: String,
@@ -364,7 +355,7 @@ pub async fn terminal_read(
     terminal_manager.read_from_session(id).await
 }
 
-/// List all terminal sessions
+/// 列出所有终端会话
 #[tauri::command]
 pub async fn terminal_list(
     terminal_manager: State<'_, TerminalManager>,
@@ -372,7 +363,7 @@ pub async fn terminal_list(
     terminal_manager.list_sessions().await
 }
 
-/// Get terminal session info
+/// 获取终端会话信息
 #[tauri::command]
 pub async fn terminal_get_info(
     id: String,

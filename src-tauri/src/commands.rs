@@ -13,7 +13,10 @@ use std::{
 use log::{debug, error, info, warn};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Runtime, Window, WindowEvent, WindowUrl};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WindowEvent};
+use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_shell::ShellExt;
 
 // ============================================================================
@@ -91,13 +94,24 @@ pub struct UpdaterState {
     pub progress: Option<f64>,
 }
 
+impl Default for UpdaterState {
+    fn default() -> Self {
+        Self {
+            status: "idle".to_string(),
+            message: None,
+            version: None,
+            progress: None,
+        }
+    }
+}
+
 // ============================================================================
 // App State
 // ============================================================================
 
 #[derive(Default)]
 pub struct AppState {
-    pub main_window: Arc<Mutex<Option<Window>>>,
+    pub main_window: Arc<Mutex<Option<WebviewWindow>>>,
     pub sidecar_process: Arc<Mutex<Option<tokio::process::Child>>>,
     pub server_url: Arc<Mutex<Option<String>>>,
     pub server_username: Arc<Mutex<Option<String>>>,
@@ -143,7 +157,7 @@ fn generate_password() -> String {
 // ============================================================================
 
 /// Spawn the OpenCode sidecar server (backend)
-pub async fn spawn_sidecar(handle: tauri::AppHandle, window: Window) {
+pub async fn spawn_sidecar(handle: tauri::AppHandle, window: WebviewWindow) {
     info!("Starting OpenCode sidecar server...");
 
     // In production, we would:
@@ -185,12 +199,10 @@ pub async fn create_new_window(
     title: Option<String>,
     url: Option<String>,
 ) -> Result<(), String> {
-    let window = WindowBuilder::new(&app, WindowUrl::App(url.unwrap_or("/".into())))
+    let label = format!("window-{}", rand::random::<u16>());
+    let window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.unwrap_or("/".into())))
         .title(title.unwrap_or("OpenCode - New Window".to_string()))
-        .inner_size(tauri::Size::Logical(tauri::LogicalSize {
-            width: 1280.0,
-            height: 800.0,
-        }))
+        .inner_size(1280.0, 800.0)
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -199,41 +211,41 @@ pub async fn create_new_window(
 }
 
 #[tauri::command]
-pub async fn get_window_count(manager: tauri::Manager<Runtime>) -> Result<usize, String> {
-    Ok(manager.webviews().len())
+pub async fn get_window_count(app: tauri::AppHandle) -> Result<usize, String> {
+    Ok(app.webviews().len())
 }
 
 #[tauri::command]
-pub async fn get_window_focused(window: Window) -> Result<bool, String> {
+pub async fn get_window_focused(window: WebviewWindow) -> Result<bool, String> {
     Ok(window.is_focused().await)
 }
 
 #[tauri::command]
-pub async fn set_window_focus(window: Window) -> Result<(), String> {
+pub async fn set_window_focus(window: WebviewWindow) -> Result<(), String> {
     window.set_focus().await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn show_window(window: Window) -> Result<(), String> {
+pub async fn show_window(window: WebviewWindow) -> Result<(), String> {
     window.show().map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn hide_window(window: Window) -> Result<(), String> {
+pub async fn hide_window(window: WebviewWindow) -> Result<(), String> {
     window.hide().map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn close_window(window: Window) -> Result<(), String> {
+pub async fn close_window(window: WebviewWindow) -> Result<(), String> {
     window.close().map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn get_zoom_factor(window: Window) -> Result<f64, String> {
+pub async fn get_zoom_factor(window: WebviewWindow) -> Result<f64, String> {
     Ok(window.scale_factor().await)
 }
 
@@ -262,7 +274,7 @@ pub async fn set_pinch_zoom_enabled(
 }
 
 #[tauri::command]
-pub async fn set_titlebar_theme(theme: TitlebarTheme, window: Window) -> Result<(), String> {
+pub async fn set_titlebar_theme(theme: TitlebarTheme, window: WebviewWindow) -> Result<(), String> {
     // In Tauri, we would customize window decorations
     // For now, just store the preference
     debug!("Titlebar theme set to: {:?}", theme.mode);
@@ -279,7 +291,7 @@ pub async fn set_background_color(
 }
 
 #[tauri::command]
-pub async fn set_window_title(title: String, window: Window) -> Result<(), String> {
+pub async fn set_window_title(title: String, window: WebviewWindow) -> Result<(), String> {
     window.set_title(&title);
     Ok(())
 }
@@ -443,7 +455,7 @@ async fn resolve_app_path_impl(app_name: &str) -> Result<Option<String>, String>
 
 #[tauri::command]
 pub async fn open_directory_picker(
-    window: Window,
+    window: WebviewWindow,
     opts: Option<OpenDirectoryPickerOpts>,
 ) -> Result<Option<Vec<String>>, String> {
     let mut builder = window.dialog().folder();
@@ -459,7 +471,7 @@ pub async fn open_directory_picker(
 
 #[tauri::command]
 pub async fn open_file_picker(
-    window: Window,
+    window: WebviewWindow,
     opts: Option<OpenFilePickerOpts>,
 ) -> Result<Option<serde_json::Value>, String> {
     let multiple = opts.as_ref().and_then(|o| o.multiple).unwrap_or(false);
@@ -529,7 +541,7 @@ pub async fn open_file_picker(
 
 #[tauri::command]
 pub async fn save_file_picker(
-    window: Window,
+    window: WebviewWindow,
     opts: Option<SaveFilePickerOpts>,
 ) -> Result<Option<String>, String> {
     let mut builder = window.dialog().file().as_save();
@@ -560,7 +572,7 @@ pub async fn release_picked_files(_token: String) -> Result<(), String> {
 // ============================================================================
 
 #[tauri::command]
-pub async fn open_link(window: Window, url: String) -> Result<(), String> {
+pub async fn open_link(window: WebviewWindow, url: String) -> Result<(), String> {
     window
         .shell()
         .open(url, None)
@@ -570,7 +582,7 @@ pub async fn open_link(window: Window, url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn open_path(window: Window, path: String, app: Option<String>) -> Result<(), String> {
+pub async fn open_path(window: WebviewWindow, path: String, app: Option<String>) -> Result<(), String> {
     if let Some(app_name) = app {
         #[cfg(target_os = "macos")]
         {
@@ -604,7 +616,7 @@ pub async fn open_path(window: Window, path: String, app: Option<String>) -> Res
 }
 
 #[tauri::command]
-pub async fn read_clipboard_image(window: Window) -> Result<Option<serde_json::Value>, String> {
+pub async fn read_clipboard_image(window: WebviewWindow) -> Result<Option<serde_json::Value>, String> {
     let image = window
         .clipboard()
         .read_image()
@@ -622,7 +634,7 @@ pub async fn read_clipboard_image(window: Window) -> Result<Option<serde_json::V
 
 #[tauri::command]
 pub async fn show_notification(
-    window: Window,
+    window: WebviewWindow,
     title: String,
     body: Option<String>,
 ) -> Result<(), String> {
@@ -755,7 +767,7 @@ pub async fn record_fatal_renderer_error(error: FatalRendererError) -> Result<()
 
 #[tauri::command]
 pub async fn updater_subscribe(
-    window: Window,
+    window: WebviewWindow,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     let updater_state = state.updater_state.lock().unwrap();
@@ -767,7 +779,7 @@ pub async fn updater_subscribe(
 }
 
 #[tauri::command]
-pub async fn updater_unsubscribe(_window: Window) -> Result<(), String> {
+pub async fn updater_unsubscribe(_window: WebviewWindow) -> Result<(), String> {
     // Remove listener
     Ok(())
 }
@@ -897,7 +909,7 @@ pub async fn wsl_servers_refresh_distros() -> Result<Vec<WslDistroInfo>, String>
 }
 
 #[tauri::command]
-pub async fn wsl_servers_install_wsl(window: Window) -> Result<(), String> {
+pub async fn wsl_servers_install_wsl(window: WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         // Open Microsoft Store to install WSL
@@ -1027,7 +1039,7 @@ pub async fn wsl_servers_start_server(
 // ============================================================================
 
 #[tauri::command]
-pub async fn create_desktop_menu(window: Window) -> Result<(), String> {
+pub async fn create_desktop_menu(window: WebviewWindow) -> Result<(), String> {
     // In Tauri, menus are created differently
     // For now, just log
     debug!("Creating desktop menu...");
@@ -1035,7 +1047,7 @@ pub async fn create_desktop_menu(window: Window) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn run_desktop_menu_action(action: String, window: Window) -> Result<(), String> {
+pub async fn run_desktop_menu_action(action: String, window: WebviewWindow) -> Result<(), String> {
     debug!("Running desktop menu action: {}", action);
 
     // Handle common menu actions
@@ -1068,7 +1080,7 @@ pub async fn run_desktop_menu_action(action: String, window: Window) -> Result<(
 
 #[tauri::command]
 pub async fn register_deep_link_handler(
-    window: Window,
+    window: WebviewWindow,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
     // In Tauri, deep links can be handled via custom protocol

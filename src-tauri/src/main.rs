@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use env_logger;
 use log::{debug, error, info, warn};
-use tauri::{Manager, Runtime, Window, WindowBuilder, WindowEvent, WindowUrl};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 
 // ============================================================================
 // Modules
@@ -180,8 +180,8 @@ async fn main() {
             Ok(())
         })
         // Global window event handler
-        .on_window_event(|window, event| {
-            handle_global_window_event(window, event);
+                .on_window_event(|window: &WebviewWindow, event| {
+            handle_global_window_event(window.clone(), event);
         })
         .run(tauri::generate_context!())
         .expect("Error while running Tauri application");
@@ -194,8 +194,8 @@ async fn main() {
 /// Create application state
 fn create_app_state() -> AppState {
     AppState {
-        main_window: None,
-        sidecar_process: None,
+        main_window: Arc::new(Mutex::new(None)),
+        sidecar_process: Arc::new(Mutex::new(None)),
         server_url: Arc::new(Mutex::new(None)),
         server_username: Arc::new(Mutex::new(None)),
         server_password: Arc::new(Mutex::new(None)),
@@ -203,28 +203,17 @@ fn create_app_state() -> AppState {
         pinch_zoom_enabled: Arc::new(Mutex::new(false)),
         pending_deep_links: Arc::new(Mutex::new(Vec::new())),
         wsl_servers: Arc::new(Mutex::new(std::collections::HashMap::new())),
-        updater_state: Arc::new(Mutex::new(commands::UpdaterState {
-            status: "idle".to_string(),
-            message: None,
-            version: None,
-            progress: None,
-        })),
+        updater_state: Arc::new(Mutex::new(UpdaterState::default())),
         store_data: Arc::new(Mutex::new(std::collections::HashMap::new())),
     }
 }
 
 /// Create main window
-fn create_main_window(app: &mut tauri::App) -> Result<Window, Box<dyn std::error::Error>> {
-    let window = WindowBuilder::new(app, WindowUrl::App("/".into()))
+fn create_main_window(app: &mut tauri::App) -> Result<WebviewWindow, Box<dyn std::error::Error>> {
+    let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("/".into()))
         .title(APP_NAME)
-        .inner_size(tauri::Size::Logical(tauri::LogicalSize {
-            width: DEFAULT_WINDOW_WIDTH,
-            height: DEFAULT_WINDOW_HEIGHT,
-        }))
-        .min_inner_size(tauri::Size::Logical(tauri::LogicalSize {
-            width: MIN_WINDOW_WIDTH,
-            height: MIN_WINDOW_HEIGHT,
-        }))
+        .inner_size(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
+        .min_inner_size(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
         .resizable(true)
         .visible(false) // Hide initially, show after sidecar is ready
         .decorations(true)
@@ -236,7 +225,7 @@ fn create_main_window(app: &mut tauri::App) -> Result<Window, Box<dyn std::error
 /// Set up window event handlers
 fn setup_window_events(
     app: &mut tauri::App,
-    window: Window,
+    window: WebviewWindow,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let window_clone = window.clone();
     let state_clone = app.state::<AppState>().clone();
@@ -249,7 +238,7 @@ fn setup_window_events(
 }
 
 /// Spawn the OpenCode sidecar server
-fn spawn_sidecar_server(handle: tauri::AppHandle, window: Window) {
+fn spawn_sidecar_server(handle: tauri::AppHandle, window: WebviewWindow) {
     info!("Starting OpenCode sidecar server...");
 
     // In production, we would:
@@ -269,7 +258,7 @@ fn spawn_sidecar_server(handle: tauri::AppHandle, window: Window) {
 // ============================================================================
 
 /// Handle window-specific events
-fn handle_window_event(event: WindowEvent, window: &Window, state: &tauri::State<AppState>) {
+fn handle_window_event(event: WindowEvent, window: &WebviewWindow, state: &tauri::State<AppState>) {
     match event {
         WindowEvent::CloseRequested { api, .. } => {
             // Prevent window from closing, hide instead (Electron-like behavior)
@@ -312,7 +301,7 @@ fn handle_window_event(event: WindowEvent, window: &Window, state: &tauri::State
 }
 
 /// Handle global window events
-fn handle_global_window_event(window: Window, event: WindowEvent) {
+fn handle_global_window_event(window: WebviewWindow, event: WindowEvent) {
     match event {
         WindowEvent::CloseRequested { api, .. } => {
             // For all windows, hide instead of close
