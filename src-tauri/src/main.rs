@@ -226,7 +226,7 @@ fn setup_window_events(
     app: &mut tauri::App,
     window: WebviewWindow,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let state_clone = app.state::<AppState>().clone();
+    let state_clone = (*app.state::<AppState>()).clone();
     let w = window.clone();
 
     window.on_window_event(move |event| {
@@ -258,7 +258,7 @@ fn spawn_sidecar_server(handle: tauri::AppHandle, window: WebviewWindow) {
 // ============================================================================
 
 /// Handle window-specific events
-fn handle_window_event(event: WindowEvent, window: &tauri::Window, state: &tauri::State<AppState>) {
+fn handle_window_event(event: WindowEvent, window: &tauri::Window, state: &AppState) {
     match event {
         WindowEvent::CloseRequested { api, .. } => {
             // Prevent window from closing, hide instead (Electron-like behavior)
