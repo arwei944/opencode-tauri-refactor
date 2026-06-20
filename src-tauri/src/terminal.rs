@@ -441,7 +441,10 @@ mod tests {
 
     #[test]
     fn test_terminal_size_serde() {
-        let size = TerminalSize { cols: 100, rows: 40 };
+        let size = TerminalSize {
+            cols: 100,
+            rows: 40,
+        };
         let json = serde_json::to_string(&size).unwrap();
         let restored: TerminalSize = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.cols, 100);

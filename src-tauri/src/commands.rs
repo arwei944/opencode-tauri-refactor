@@ -1407,8 +1407,14 @@ mod tests {
         let mut store: HashMap<String, HashMap<String, String>> = HashMap::new();
 
         // set
-        store.entry("settings".to_string()).or_default().insert("theme".to_string(), "dark".to_string());
-        store.entry("settings".to_string()).or_default().insert("lang".to_string(), "zh".to_string());
+        store
+            .entry("settings".to_string())
+            .or_default()
+            .insert("theme".to_string(), "dark".to_string());
+        store
+            .entry("settings".to_string())
+            .or_default()
+            .insert("lang".to_string(), "zh".to_string());
 
         // get
         let v = store.get("settings").and_then(|m| m.get("theme")).cloned();
@@ -1419,7 +1425,10 @@ mod tests {
         assert_eq!(len, 2);
 
         // keys
-        let keys: Vec<String> = store.get("settings").map(|m| m.keys().cloned().collect()).unwrap_or_default();
+        let keys: Vec<String> = store
+            .get("settings")
+            .map(|m| m.keys().cloned().collect())
+            .unwrap_or_default();
         assert_eq!(keys.len(), 2);
         assert!(keys.contains(&"theme".to_string()));
         assert!(keys.contains(&"lang".to_string()));

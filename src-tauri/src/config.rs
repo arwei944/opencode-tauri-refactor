@@ -413,7 +413,8 @@ mod tests {
 
         // 保存：先 load 不存在的文件，会触发默认值并保存
         let mut mgr = ConfigManager::new();
-        mgr.load(tmp.clone()).expect("load should succeed with defaults");
+        mgr.load(tmp.clone())
+            .expect("load should succeed with defaults");
         assert!(tmp.exists(), "配置文件应当被创建");
 
         // 加载回来
@@ -469,8 +470,7 @@ mod tests {
     #[test]
     fn test_config_manager_get_sub_configs() {
         let mgr = ConfigManager::new();
-        mgr.load(env::temp_dir().join("dummy.json"))
-            .expect("load");
+        mgr.load(env::temp_dir().join("dummy.json")).expect("load");
 
         let server = mgr.get_server_config();
         assert_eq!(server.hostname, "127.0.0.1");
@@ -520,6 +520,9 @@ mod tests {
         assert_eq!(restored.server.hostname, original.server.hostname);
         assert_eq!(restored.window.width, original.window.width);
         assert_eq!(restored.features.deep_links, original.features.deep_links);
-        assert_eq!(restored.updater.check_interval, original.updater.check_interval);
+        assert_eq!(
+            restored.updater.check_interval,
+            original.updater.check_interval
+        );
     }
 }
