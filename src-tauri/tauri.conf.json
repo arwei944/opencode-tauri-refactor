@@ -39,12 +39,6 @@
     "shell": {
       "open": true
     },
-    "fs": {
-      "scope": {
-        "allow": ["**"],
-        "deny": []
-      }
-    },
     "notification": {
       "all": true
     },
