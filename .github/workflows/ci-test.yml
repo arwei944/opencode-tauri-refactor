@@ -48,10 +48,13 @@ jobs:
           shared-key: "opencode-tauri"
           
       - name: Check Rust formatting
+        working-directory: src-tauri
         run: cargo fmt --check
         
       - name: Check Rust clippy
+        working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings
         
       - name: Test Rust code
+        working-directory: src-tauri
         run: cargo test
