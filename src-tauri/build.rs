@@ -6,9 +6,9 @@ fn main() {
     // 1. Embed assets (icons, etc.)
     // 2. Generate code
     // 3. Set up build-time configuration
-    
+
     println!("Building OpenCode Tauri Desktop...");
-    
+
     // Re-export tauri-build's main function
     tauri_build::build()
 }

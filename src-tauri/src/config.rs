@@ -194,7 +194,7 @@ impl ConfigManager {
     /// Load configuration from file
     pub fn load(&mut self, path: PathBuf) -> Result<(), String> {
         self.config_path = path;
-        
+
         // Try to read config file
         match std::fs::read_to_string(&self.config_path) {
             Ok(content) => {
@@ -220,14 +220,14 @@ impl ConfigManager {
         if self.config_path.as_os_str().is_empty() {
             return Err("Config path not set".to_string());
         }
-        
+
         let config = self.config.lock().unwrap();
         let content = serde_json::to_string_pretty(&*config)
             .map_err(|e| format!("Failed to serialize config: {}", e))?;
-        
+
         std::fs::write(&self.config_path, content)
             .map_err(|e| format!("Failed to write config: {}", e))?;
-        
+
         Ok(())
     }
 

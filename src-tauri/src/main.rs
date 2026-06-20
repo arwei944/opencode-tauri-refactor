@@ -1,6 +1,6 @@
 //! OpenCode Tauri Desktop - Main Application
 //! This is a complete reconstruction of the OpenCode Electron desktop application using Tauri.
-//! 
+//!
 //! Migration: Electron -> Tauri
 //! Benefits: Smaller bundle size, lower memory usage, faster startup, native performance
 
@@ -9,9 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use env_logger;
 use log::{debug, error, info, warn};
-use tauri::{
-    Manager, Runtime, Window, WindowBuilder, WindowEvent, WindowUrl,
-};
+use tauri::{Manager, Runtime, Window, WindowBuilder, WindowEvent, WindowUrl};
 
 // ============================================================================
 // Modules
@@ -50,10 +48,8 @@ const SIDECAR_STOP_TIMEOUT: u64 = 6_000; // 6 seconds
 #[tokio::main]
 async fn main() {
     // Initialize logging
-    env_logger::Builder::from_env(
-        env_logger::Env::default().default_filter_or("info,tauri=warn"),
-    )
-    .init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info,tauri=warn"))
+        .init();
 
     info!("{}", format_app_info());
     info!("Starting Tauri Desktop Application...");
@@ -95,36 +91,30 @@ async fn main() {
             commands::set_titlebar_theme,
             commands::set_background_color,
             commands::set_window_title,
-            
             // ========== Sidecar & Server ==========
             commands::kill_sidecar,
             commands::await_initialization,
             commands::consume_initial_deep_links,
             commands::get_default_server_url,
             commands::set_default_server_url,
-            
             // ========== App Checking ==========
             commands::check_app_exists,
             commands::resolve_app_path,
-            
             // ========== File Pickers ==========
             commands::open_directory_picker,
             commands::open_file_picker,
             commands::save_file_picker,
             commands::read_picked_file,
             commands::release_picked_files,
-            
             // ========== System ==========
             commands::open_link,
             commands::open_path,
             commands::read_clipboard_image,
             commands::show_notification,
             commands::relaunch,
-            
             // ========== Display Backend ==========
             commands::get_display_backend,
             commands::set_display_backend,
-            
             // ========== Store ==========
             commands::store_get,
             commands::store_set,
@@ -132,13 +122,11 @@ async fn main() {
             commands::store_clear,
             commands::store_keys,
             commands::store_length,
-            
             // ========== Updater ==========
             commands::updater_subscribe,
             commands::updater_unsubscribe,
             commands::updater_check,
             commands::updater_install,
-            
             // ========== WSL (Windows) ==========
             commands::wsl_servers_get_state,
             commands::wsl_servers_probe_runtime,
@@ -150,14 +138,11 @@ async fn main() {
             commands::wsl_servers_add_server,
             commands::wsl_servers_remove_server,
             commands::wsl_servers_start_server,
-            
             // ========== Menu ==========
             commands::create_desktop_menu,
             commands::run_desktop_menu_action,
-            
             // ========== Deep Links ==========
             commands::register_deep_link_handler,
-            
             // ========== Terminal ==========
             terminal_create,
             terminal_destroy,
@@ -166,7 +151,6 @@ async fn main() {
             terminal_read,
             terminal_list,
             terminal_get_info,
-            
             // ========== Utilities ==========
             commands::parse_markdown,
             commands::get_app_version,
@@ -178,7 +162,7 @@ async fn main() {
         // Application setup
         .setup(|app| {
             info!("Setting up application...");
-            
+
             // Create main window
             let window = create_main_window(app)?;
 
@@ -250,7 +234,10 @@ fn create_main_window(app: &mut tauri::App) -> Result<Window, Box<dyn std::error
 }
 
 /// Set up window event handlers
-fn setup_window_events(app: &mut tauri::App, window: Window) -> Result<(), Box<dyn std::error::Error>> {
+fn setup_window_events(
+    app: &mut tauri::App,
+    window: Window,
+) -> Result<(), Box<dyn std::error::Error>> {
     let window_clone = window.clone();
     let state_clone = app.state::<AppState>().clone();
 
@@ -311,8 +298,14 @@ fn handle_window_event(event: WindowEvent, window: &Window, state: &tauri::State
         WindowEvent::Moved(position) => {
             debug!("Window moved to: ({}, {})", position.x, position.y);
         }
-        WindowEvent::ScaleFactorChanged { scale_factor, new_inner_size } => {
-            debug!("Scale factor changed: {}, new size: {}x{}", scale_factor, new_inner_size.width, new_inner_size.height);
+        WindowEvent::ScaleFactorChanged {
+            scale_factor,
+            new_inner_size,
+        } => {
+            debug!(
+                "Scale factor changed: {}, new size: {}x{}",
+                scale_factor, new_inner_size.width, new_inner_size.height
+            );
         }
         _ => {}
     }
@@ -337,13 +330,13 @@ fn handle_global_window_event(window: Window, event: WindowEvent) {
 /// Set up environment variables for the application
 fn setup_environment() {
     info!("Setting up environment...");
-    
+
     // OpenCode-specific environment variables
     env::set_var("OPENCODE_CLIENT", "desktop");
     env::set_var("OPENCODE_DISABLE_EMBEDDED_WEB_UI", "true");
     env::set_var("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true");
     env::set_var("OPENCODE_EXPERIMENTAL_FILEWATCHER", "true");
-    
+
     // Platform-specific environment setup
     #[cfg(target_os = "linux")]
     {

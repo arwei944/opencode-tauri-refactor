@@ -117,21 +117,25 @@ pub struct AppState {
 
 fn generate_token() -> String {
     let mut rng = rand::thread_rng();
-    (0..32).map(|_| format!("{:02x}", rng.gen::<u8>())).collect()
+    (0..32)
+        .map(|_| format!("{:02x}", rng.gen::<u8>()))
+        .collect()
 }
 
 fn generate_password() -> String {
     let mut rng = rand::thread_rng();
-    (0..16).map(|_| {
-        let byte = rng.gen::<u8>();
-        if byte % 3 == 0 {
-            (b'a' + (byte % 26)) as char
-        } else if byte % 3 == 1 {
-            (b'A' + (byte % 26)) as char
-        } else {
-            (b'0' + (byte % 10)) as char
-        }
-    }).collect()
+    (0..16)
+        .map(|_| {
+            let byte = rng.gen::<u8>();
+            if byte % 3 == 0 {
+                (b'a' + (byte % 26)) as char
+            } else if byte % 3 == 1 {
+                (b'A' + (byte % 26)) as char
+            } else {
+                (b'0' + (byte % 10)) as char
+            }
+        })
+        .collect()
 }
 
 // ============================================================================
@@ -249,7 +253,10 @@ pub async fn get_pinch_zoom_enabled(state: tauri::State<'_, AppState>) -> Result
 }
 
 #[tauri::command]
-pub async fn set_pinch_zoom_enabled(enabled: bool, state: tauri::State<'_, AppState>) -> Result<(), String> {
+pub async fn set_pinch_zoom_enabled(
+    enabled: bool,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
     *state.pinch_zoom_enabled.lock().unwrap() = enabled;
     Ok(())
 }
@@ -263,7 +270,10 @@ pub async fn set_titlebar_theme(theme: TitlebarTheme, window: Window) -> Result<
 }
 
 #[tauri::command]
-pub async fn set_background_color(color: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+pub async fn set_background_color(
+    color: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
     *state.background_color.lock().unwrap() = Some(color);
     Ok(())
 }
@@ -288,7 +298,9 @@ pub async fn kill_sidecar(state: tauri::State<'_, AppState>) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub async fn await_initialization(state: tauri::State<'_, AppState>) -> Result<ServerReadyData, String> {
+pub async fn await_initialization(
+    state: tauri::State<'_, AppState>,
+) -> Result<ServerReadyData, String> {
     let server_url = state.server_url.lock().unwrap().clone();
     let server_username = state.server_username.lock().unwrap().clone();
     let server_password = state.server_password.lock().unwrap().clone();
@@ -301,18 +313,25 @@ pub async fn await_initialization(state: tauri::State<'_, AppState>) -> Result<S
 }
 
 #[tauri::command]
-pub async fn consume_initial_deep_links(state: tauri::State<'_, AppState>) -> Result<Vec<String>, String> {
+pub async fn consume_initial_deep_links(
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<String>, String> {
     let mut links = state.pending_deep_links.lock().unwrap();
     Ok(links.drain(..).collect())
 }
 
 #[tauri::command]
-pub async fn get_default_server_url(state: tauri::State<'_, AppState>) -> Result<Option<String>, String> {
+pub async fn get_default_server_url(
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<String>, String> {
     Ok(state.server_url.lock().unwrap().clone())
 }
 
 #[tauri::command]
-pub async fn set_default_server_url(url: Option<String>, state: tauri::State<'_, AppState>) -> Result<(), String> {
+pub async fn set_default_server_url(
+    url: Option<String>,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
     *state.server_url.lock().unwrap() = url;
     Ok(())
 }
@@ -575,7 +594,9 @@ pub async fn open_path(window: Window, path: String, app: Option<String>) -> Res
                 .map_err(|e| e.to_string())?;
         }
     } else {
-        window.shell().open(&path, None)
+        window
+            .shell()
+            .open(&path, None)
             .await
             .map_err(|e| e.to_string())?;
     }
@@ -600,7 +621,11 @@ pub async fn read_clipboard_image(window: Window) -> Result<Option<serde_json::V
 }
 
 #[tauri::command]
-pub async fn show_notification(window: Window, title: String, body: Option<String>) -> Result<(), String> {
+pub async fn show_notification(
+    window: Window,
+    title: String,
+    body: Option<String>,
+) -> Result<(), String> {
     window
         .notification()
         .show(&title, body.as_deref(), None)
@@ -680,10 +705,7 @@ pub async fn store_delete(
 }
 
 #[tauri::command]
-pub async fn store_clear(
-    name: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn store_clear(name: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let mut store = state.store_data.lock().unwrap();
     store.remove(&name);
     Ok(())
@@ -695,7 +717,10 @@ pub async fn store_keys(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<String>, String> {
     let store = state.store_data.lock().unwrap();
-    Ok(store.get(&name).map(|m| m.keys().cloned().collect()).unwrap_or_default())
+    Ok(store
+        .get(&name)
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default())
 }
 
 #[tauri::command]
@@ -750,31 +775,31 @@ pub async fn updater_unsubscribe(_window: Window) -> Result<(), String> {
 #[tauri::command]
 pub async fn updater_check(state: tauri::State<'_, AppState>) -> Result<UpdaterState, String> {
     let mut updater_state = state.updater_state.lock().unwrap();
-    
+
     // Mock implementation - in production, check for updates
     updater_state.status = "checking".to_string();
     updater_state.message = Some("Checking for updates...".to_string());
-    
+
     // Simulate check
     tokio::time::sleep(Duration::from_secs(1)).await;
-    
+
     updater_state.status = "up-to-date".to_string();
     updater_state.message = Some("No updates available".to_string());
-    
+
     Ok(updater_state.clone())
 }
 
 #[tauri::command]
 pub async fn updater_install(state: tauri::State<'_, AppState>) -> Result<(), String> {
     let mut updater_state = state.updater_state.lock().unwrap();
-    
+
     if updater_state.status != "ready" {
         return Err("Update is not ready to install".to_string());
     }
-    
+
     updater_state.status = "installing".to_string();
     updater_state.message = Some("Installing update...".to_string());
-    
+
     // In production, trigger the update installation
     // For now, just simulate
     tokio::time::sleep(Duration::from_secs(2)).await;
@@ -842,11 +867,12 @@ pub async fn wsl_servers_refresh_distros() -> Result<Vec<WslDistroInfo>, String>
             .map_err(|e| e.to_string())?;
 
         if !output.status.success() {
-            return Err(String::from_utf8(output.stderr).unwrap_or_else(|_| "Failed to list WSL distros".to_string()));
+            return Err(String::from_utf8(output.stderr)
+                .unwrap_or_else(|_| "Failed to list WSL distros".to_string()));
         }
 
         let stdout = String::from_utf8(output.stdout).map_err(|e| e.to_string())?;
-        
+
         // Parse WSL output
         let mut distros = Vec::new();
         for line in stdout.lines().skip(1) {
@@ -860,7 +886,7 @@ pub async fn wsl_servers_refresh_distros() -> Result<Vec<WslDistroInfo>, String>
                 });
             }
         }
-        
+
         Ok(distros)
     }
 
@@ -875,12 +901,11 @@ pub async fn wsl_servers_install_wsl(window: Window) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         // Open Microsoft Store to install WSL
-        window.shell().open(
-            "ms-windows-store://pdp/?ProductId=9P9TQF7MRM4R",
-            None,
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+        window
+            .shell()
+            .open("ms-windows-store://pdp/?ProductId=9P9TQF7MRM4R", None)
+            .await
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -960,24 +985,36 @@ pub async fn wsl_servers_open_terminal(name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn wsl_servers_add_server(config: WslServerConfig, state: tauri::State<'_, AppState>) -> Result<(), String> {
+pub async fn wsl_servers_add_server(
+    config: WslServerConfig,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
     let mut wsl_servers = state.wsl_servers.lock().unwrap();
     wsl_servers.insert(config.id.clone(), config);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn wsl_servers_remove_server(id: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+pub async fn wsl_servers_remove_server(
+    id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
     let mut wsl_servers = state.wsl_servers.lock().unwrap();
     wsl_servers.remove(&id);
     Ok(())
 }
 
 #[tauri::command]
-pub async fn wsl_servers_start_server(id: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
+pub async fn wsl_servers_start_server(
+    id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
     let wsl_servers = state.wsl_servers.lock().unwrap();
     if let Some(server) = wsl_servers.get(&id) {
-        warn!("Starting WSL server: {} on port {}", server.name, server.port);
+        warn!(
+            "Starting WSL server: {} on port {}",
+            server.name, server.port
+        );
         // In production, start the server process
         Ok(())
     } else {
@@ -1000,7 +1037,7 @@ pub async fn create_desktop_menu(window: Window) -> Result<(), String> {
 #[tauri::command]
 pub async fn run_desktop_menu_action(action: String, window: Window) -> Result<(), String> {
     debug!("Running desktop menu action: {}", action);
-    
+
     // Handle common menu actions
     match action.as_str() {
         "check-for-updates" => {
@@ -1021,7 +1058,7 @@ pub async fn run_desktop_menu_action(action: String, window: Window) -> Result<(
             warn!("Unknown menu action: {}", action);
         }
     }
-    
+
     Ok(())
 }
 
@@ -1030,13 +1067,16 @@ pub async fn run_desktop_menu_action(action: String, window: Window) -> Result<(
 // ============================================================================
 
 #[tauri::command]
-pub async fn register_deep_link_handler(window: Window, state: tauri::State<'_, AppState>) -> Result<(), String> {
+pub async fn register_deep_link_handler(
+    window: Window,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
     // In Tauri, deep links can be handled via custom protocol
     debug!("Registering deep link handler...");
-    
+
     // Store the window reference for later use
     *state.main_window.lock().unwrap() = Some(window);
-    
+
     Ok(())
 }
 

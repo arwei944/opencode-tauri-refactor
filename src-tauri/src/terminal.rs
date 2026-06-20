@@ -86,7 +86,7 @@ impl TerminalManager {
 
         // Build command
         let mut cmd = CommandBuilder::new(shell);
-        
+
         // Set working directory
         if let Some(cwd) = &config.cwd {
             cmd.cwd(cwd);
@@ -104,11 +104,14 @@ impl TerminalManager {
         };
 
         // Create PTY
-        let pty = self.pty_system.open_pty(&size)
+        let pty = self
+            .pty_system
+            .open_pty(&size)
             .map_err(|e| format!("Failed to open PTY: {}", e))?;
 
         // Spawn process
-        let process = cmd.spawn_pty(pty.try_clone()?)
+        let process = cmd
+            .spawn_pty(pty.try_clone()?)
             .map_err(|e| format!("Failed to spawn process: {}", e))?;
 
         // Create session
@@ -133,10 +136,10 @@ impl TerminalManager {
         if let Some(session) = sessions.remove(&id) {
             // Kill the process
             session.process.kill().await.map_err(|e| e.to_string())?;
-            
+
             // Close PTY
             drop(session.pty);
-            
+
             info!("Terminal session destroyed: {}", id);
         }
 
@@ -145,7 +148,10 @@ impl TerminalManager {
 
     /// Resize a terminal session
     pub async fn resize_session(&self, id: String, size: TerminalSize) -> Result<(), String> {
-        debug!("Resizing terminal session {} to {}x{}", id, size.cols, size.rows);
+        debug!(
+            "Resizing terminal session {} to {}x{}",
+            id, size.cols, size.rows
+        );
 
         let sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.get(&id) {
@@ -153,16 +159,18 @@ impl TerminalManager {
                 cols: size.cols,
                 rows: size.rows,
             };
-            
-            session.pty.resize(pty_size)
+
+            session
+                .pty
+                .resize(pty_size)
                 .map_err(|e| format!("Failed to resize PTY: {}", e))?;
-            
+
             // Also send SIGWINCH to the process if on Unix
             #[cfg(unix)]
             {
                 use nix::sys::signal::{kill, Signal};
                 use nix::unistd::Pid;
-                
+
                 let pid = Pid::from_raw(session.process.id() as i32);
                 if let Err(e) = kill(pid, Signal::SIGWINCH) {
                     warn!("Failed to send SIGWINCH: {}", e);
@@ -179,7 +187,9 @@ impl TerminalManager {
 
         let sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.get(&id) {
-            session.pty.write(data.as_bytes())
+            session
+                .pty
+                .write(data.as_bytes())
                 .map_err(|e| format!("Failed to write to PTY: {}", e))?;
         }
 
@@ -191,9 +201,11 @@ impl TerminalManager {
         let sessions = self.sessions.lock().unwrap();
         if let Some(session) = sessions.get(&id) {
             let mut buffer = vec![0u8; 4096];
-            let n = session.pty.read(&mut buffer)
+            let n = session
+                .pty
+                .read(&mut buffer)
                 .map_err(|e| format!("Failed to read from PTY: {}", e))?;
-            
+
             if n > 0 {
                 buffer.truncate(n);
                 return Ok(String::from_utf8_lossy(&buffer).to_string());
@@ -231,12 +243,18 @@ impl TerminalManager {
             if let Ok(path) = std::env::var("COMSPEC") {
                 return Ok(path);
             }
-            
+
             // Try PowerShell
-            if std::path::Path::new("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe").exists() {
-                return Ok("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe".to_string());
+            if std::path::Path::new(
+                "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+            )
+            .exists()
+            {
+                return Ok(
+                    "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe".to_string(),
+                );
             }
-            
+
             // Fall back to cmd
             Ok("cmd.exe".to_string())
         }
@@ -262,7 +280,7 @@ impl TerminalManager {
                     return Ok(shell);
                 }
             }
-            
+
             // Try common shells
             let shells = ["/bin/bash", "/bin/sh", "/usr/bin/bash", "/usr/bin/sh"];
             for shell in shells.iter() {
@@ -296,8 +314,8 @@ impl Default for TerminalConfig {
 // Terminal Commands (for Tauri)
 // ============================================================================
 
-use tauri::State;
 use crate::AppState;
+use tauri::State;
 
 /// Create a new terminal session
 #[tauri::command]
@@ -348,7 +366,9 @@ pub async fn terminal_read(
 
 /// List all terminal sessions
 #[tauri::command]
-pub async fn terminal_list(terminal_manager: State<'_, TerminalManager>) -> Result<Vec<String>, String> {
+pub async fn terminal_list(
+    terminal_manager: State<'_, TerminalManager>,
+) -> Result<Vec<String>, String> {
     terminal_manager.list_sessions().await
 }
 
