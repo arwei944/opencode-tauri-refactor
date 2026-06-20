@@ -1179,11 +1179,12 @@ mod tests {
 
     #[test]
     fn test_updater_state_clone() {
-        let mut s = UpdaterState::default();
-        s.status = "checking".to_string();
-        s.message = Some("Checking for updates...".to_string());
-        s.version = Some("1.17.9".to_string());
-        s.progress = Some(0.5);
+        let s = UpdaterState {
+            status: "checking".to_string(),
+            message: Some("Checking for updates...".to_string()),
+            version: Some("1.17.9".to_string()),
+            progress: Some(0.5),
+        };
         let cloned = s.clone();
         assert_eq!(cloned.status, "checking");
         assert_eq!(cloned.message.as_deref(), Some("Checking for updates..."));
@@ -1442,7 +1443,7 @@ mod tests {
 
         // clear
         store.remove("settings");
-        assert!(store.get("settings").is_none());
+        assert!(!store.contains_key("settings"));
     }
 
     // ---- 屏幕获取辅助函数（来自 commands.rs 内部）----
