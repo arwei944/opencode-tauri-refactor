@@ -68,7 +68,7 @@ pub struct TerminalSize {
 pub struct TerminalManager {
     sessions: Arc<Mutex<HashMap<String, TerminalSession>>>,
     next_id: Arc<Mutex<u64>>,
-    pty_system: Box<dyn PtySystem + Send>,
+    pty_system: Box<dyn PtySystem + Send + Sync>,
 }
 
 impl TerminalManager {
