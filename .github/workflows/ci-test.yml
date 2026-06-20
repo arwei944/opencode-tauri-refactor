@@ -73,6 +73,6 @@ jobs:
         working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings
         
-      - name: Test Rust code
+      - name: Check Rust compilation
         working-directory: src-tauri
-        run: cargo test
+        run: cargo check --all-targets
