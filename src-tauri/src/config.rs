@@ -324,3 +324,202 @@ pub fn get_app_cache_dir() -> PathBuf {
             .join("opencode")
     }
 }
+
+// ============================================================================
+// 单元测试
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    // ---- AppConfig 默认值测试 ----
+
+    #[test]
+    fn test_app_config_default_values() {
+        let cfg = AppConfig::default();
+        // server 字段是 ServerConfig::default()
+        assert_eq!(cfg.server.hostname, "127.0.0.1");
+        assert_eq!(cfg.server.port, 0);
+        assert_eq!(cfg.server.username, "opencode");
+        // window 默认值
+        assert_eq!(cfg.window.width, 1280.0);
+        assert_eq!(cfg.window.height, 800.0);
+        assert_eq!(cfg.window.min_width, 800.0);
+        assert_eq!(cfg.window.min_height, 600.0);
+        assert!(cfg.window.resizable);
+        assert!(cfg.window.decorations);
+        assert!(!cfg.window.pinch_zoom_enabled);
+        assert_eq!(cfg.window.titlebar_theme, "dark");
+        // features 默认值
+        assert!(cfg.features.wsl_integration);
+        assert!(cfg.features.auto_updater);
+        assert!(cfg.features.multiple_windows);
+        assert!(cfg.features.deep_links);
+        assert!(!cfg.features.analytics);
+        // wsl 默认值
+        assert!(cfg.wsl.enabled);
+        assert!(cfg.wsl.distros.is_empty());
+        // updater 默认值
+        assert!(cfg.updater.enabled);
+        assert_eq!(cfg.updater.check_interval, 60);
+        assert_eq!(cfg.updater.channel, "stable");
+        // display 默认值
+        assert!(cfg.display.backend.is_none());
+    }
+
+    // ---- 各子结构体默认值 ----
+
+    #[test]
+    fn test_server_config_default() {
+        let s = ServerConfig::default();
+        assert!(s.default_url.is_none());
+        assert_eq!(s.hostname, "127.0.0.1");
+        assert_eq!(s.port, 0);
+        assert_eq!(s.username, "opencode");
+        assert!(s.password.is_empty());
+    }
+
+    #[test]
+    fn test_window_config_default() {
+        let w = WindowConfig::default();
+        assert_eq!(w.width, 1280.0);
+        assert_eq!(w.height, 800.0);
+        assert!(w.resizable);
+        assert!(w.decorations);
+        assert!(w.background_color.is_none());
+    }
+
+    #[test]
+    fn test_feature_flags_default() {
+        let f = FeatureFlags::default();
+        assert!(f.wsl_integration);
+        assert!(f.auto_updater);
+        assert!(f.multiple_windows);
+        assert!(f.deep_links);
+        assert!(!f.analytics);
+    }
+
+    // ---- ConfigManager 保存/加载/更新 ----
+
+    #[test]
+    fn test_config_manager_save_and_load() {
+        // 使用临时目录
+        let mut tmp = env::temp_dir();
+        tmp.push(format!("opencode-test-{}.json", std::process::id()));
+        // 确保文件不存在
+        let _ = std::fs::remove_file(&tmp);
+
+        // 保存：先 load 不存在的文件，会触发默认值并保存
+        let mut mgr = ConfigManager::new();
+        mgr.load(tmp.clone()).expect("load should succeed with defaults");
+        assert!(tmp.exists(), "配置文件应当被创建");
+
+        // 加载回来
+        let mut mgr2 = ConfigManager::new();
+        mgr2.load(tmp.clone()).expect("load should succeed");
+        let cfg = mgr2.get();
+        assert_eq!(cfg.server.hostname, "127.0.0.1");
+        assert_eq!(cfg.window.width, 1280.0);
+
+        // 清理
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn test_config_manager_update_and_persist() {
+        let mut tmp = env::temp_dir();
+        tmp.push(format!("opencode-update-test-{}.json", std::process::id()));
+        let _ = std::fs::remove_file(&tmp);
+
+        let mgr = ConfigManager::new();
+        mgr.load(tmp.clone()).expect("load");
+
+        // 修改并保存
+        mgr.update(|c| {
+            c.window.width = 1600.0;
+            c.server.port = 8080;
+        })
+        .expect("update");
+
+        // 重新加载验证持久化
+        let mgr2 = ConfigManager::new();
+        mgr2.load(tmp.clone()).expect("reload");
+        let cfg = mgr2.get();
+        assert_eq!(cfg.window.width, 1600.0);
+        assert_eq!(cfg.server.port, 8080);
+
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn test_config_manager_load_invalid_json() {
+        let mut tmp = env::temp_dir();
+        tmp.push(format!("opencode-invalid-{}.json", std::process::id()));
+        std::fs::write(&tmp, "{ 这不是合法 JSON }").unwrap();
+
+        let mut mgr = ConfigManager::new();
+        let res = mgr.load(tmp.clone());
+        assert!(res.is_err(), "非法 JSON 应当报错");
+
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn test_config_manager_get_sub_configs() {
+        let mgr = ConfigManager::new();
+        mgr.load(env::temp_dir().join("dummy.json"))
+            .expect("load");
+
+        let server = mgr.get_server_config();
+        assert_eq!(server.hostname, "127.0.0.1");
+
+        let window = mgr.get_window_config();
+        assert_eq!(window.width, 1280.0);
+
+        let display = mgr.get_display_config();
+        assert!(display.backend.is_none());
+
+        let features = mgr.get_feature_flags();
+        assert!(features.deep_links);
+    }
+
+    // ---- 目录解析函数 ----
+
+    #[test]
+    fn test_app_dirs_return_pathbuf() {
+        // 不依赖具体平台路径，只确认返回的是 PathBuf 且非空
+        let d = get_app_data_dir();
+        assert!(!d.as_os_str().is_empty());
+        let c = get_app_config_dir();
+        assert!(!c.as_os_str().is_empty());
+        let k = get_app_cache_dir();
+        assert!(!k.as_os_str().is_empty());
+    }
+
+    #[test]
+    fn test_app_dirs_contain_app_name() {
+        // 跨平台：路径应当包含 OpenCode 或 opencode
+        let d = get_app_data_dir();
+        let s = d.to_string_lossy().to_lowercase();
+        assert!(
+            s.contains("opencode"),
+            "数据目录路径应包含 'opencode': {}",
+            s
+        );
+    }
+
+    // ---- 序列化往返 ----
+
+    #[test]
+    fn test_app_config_serde_roundtrip() {
+        let original = AppConfig::default();
+        let json = serde_json::to_string(&original).expect("serialize");
+        let restored: AppConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.server.hostname, original.server.hostname);
+        assert_eq!(restored.window.width, original.window.width);
+        assert_eq!(restored.features.deep_links, original.features.deep_links);
+        assert_eq!(restored.updater.check_interval, original.updater.check_interval);
+    }
+}

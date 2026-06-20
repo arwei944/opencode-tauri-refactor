@@ -37,6 +37,9 @@ jobs:
       - name: Run lint
         run: pnpm lint
         
+      - name: Run vitest unit tests
+        run: pnpm test
+        
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
         run: |

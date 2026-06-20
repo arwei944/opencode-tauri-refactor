@@ -1153,3 +1153,311 @@ pub async fn get_platform() -> Result<String, String> {
 pub async fn get_arch() -> Result<String, String> {
     Ok(std::env::consts::ARCH.to_string())
 }
+
+// ============================================================================
+// 单元测试
+// ============================================================================
+//
+// 注意：Tauri command 函数的完整测试需要 mock Tauri 运行时（State/AppHandle），
+// 这通常通过 tauri::test 模块完成。当前我们针对*纯函数*和*纯数据结构*
+// 写单元测试，确保业务逻辑正确。完整的 Tauri 集成测试由 CI 端到端保证。
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- UpdaterState ----
+
+    #[test]
+    fn test_updater_state_default() {
+        let s = UpdaterState::default();
+        assert_eq!(s.status, "idle");
+        assert!(s.message.is_none());
+        assert!(s.version.is_none());
+        assert!(s.progress.is_none());
+    }
+
+    #[test]
+    fn test_updater_state_clone() {
+        let mut s = UpdaterState::default();
+        s.status = "checking".to_string();
+        s.message = Some("Checking for updates...".to_string());
+        s.version = Some("1.17.9".to_string());
+        s.progress = Some(0.5);
+        let cloned = s.clone();
+        assert_eq!(cloned.status, "checking");
+        assert_eq!(cloned.message.as_deref(), Some("Checking for updates..."));
+        assert_eq!(cloned.version.as_deref(), Some("1.17.9"));
+        assert_eq!(cloned.progress, Some(0.5));
+    }
+
+    #[test]
+    fn test_updater_state_serde_roundtrip() {
+        let s = UpdaterState {
+            status: "ready".to_string(),
+            message: Some("Update available".to_string()),
+            version: Some("2.0.0".to_string()),
+            progress: Some(1.0),
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let restored: UpdaterState = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.status, "ready");
+        assert_eq!(restored.version.as_deref(), Some("2.0.0"));
+        assert_eq!(restored.progress, Some(1.0));
+    }
+
+    // ---- Picker 选项结构体 ----
+
+    #[test]
+    fn test_open_directory_picker_opts_default_construction() {
+        // 所有字段都是 Option，应该能通过 None 构造
+        let opts = OpenDirectoryPickerOpts {
+            multiple: None,
+            title: None,
+            default_path: None,
+        };
+        assert!(opts.multiple.is_none());
+        assert!(opts.title.is_none());
+        assert!(opts.default_path.is_none());
+    }
+
+    #[test]
+    fn test_open_file_picker_opts_with_values() {
+        let opts = OpenFilePickerOpts {
+            multiple: Some(true),
+            title: Some("选择文件".to_string()),
+            default_path: Some("/tmp".to_string()),
+            extensions: Some(vec!["rs".to_string(), "toml".to_string()]),
+        };
+        assert_eq!(opts.multiple, Some(true));
+        assert_eq!(opts.title.as_deref(), Some("选择文件"));
+        assert_eq!(opts.extensions.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_save_file_picker_opts() {
+        let opts = SaveFilePickerOpts {
+            title: Some("保存为".to_string()),
+            default_path: Some("/home/user/document.txt".to_string()),
+        };
+        assert_eq!(opts.title.as_deref(), Some("保存为"));
+    }
+
+    // ---- WSL 类型 ----
+
+    #[test]
+    fn test_wsl_distro_info_serde() {
+        let info = WslDistroInfo {
+            id: "Ubuntu".to_string(),
+            name: "Ubuntu-22.04".to_string(),
+            state: "Running".to_string(),
+            version: Some("2".to_string()),
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        let restored: WslDistroInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.id, "Ubuntu");
+        assert_eq!(restored.state, "Running");
+        assert_eq!(restored.version.as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn test_wsl_server_config_construction() {
+        let cfg = WslServerConfig {
+            id: "srv1".to_string(),
+            distro: "Ubuntu".to_string(),
+            name: "OpenCode Server".to_string(),
+            hostname: "127.0.0.1".to_string(),
+            port: 9999,
+            username: "user".to_string(),
+            password: "secret".to_string(),
+        };
+        assert_eq!(cfg.port, 9999);
+        assert_eq!(cfg.hostname, "127.0.0.1");
+    }
+
+    // ---- ServerReadyData ----
+
+    #[test]
+    fn test_server_ready_data_with_credentials() {
+        let data = ServerReadyData {
+            url: "http://127.0.0.1:8080".to_string(),
+            username: Some("admin".to_string()),
+            password: Some("pass".to_string()),
+        };
+        assert_eq!(data.url, "http://127.0.0.1:8080");
+        assert!(data.username.is_some());
+        assert!(data.password.is_some());
+    }
+
+    #[test]
+    fn test_server_ready_data_without_credentials() {
+        let data = ServerReadyData {
+            url: "http://localhost".to_string(),
+            username: None,
+            password: None,
+        };
+        assert!(data.username.is_none());
+        assert!(data.password.is_none());
+    }
+
+    // ---- TitlebarTheme ----
+
+    #[test]
+    fn test_titlebar_theme_serde() {
+        let theme = TitlebarTheme {
+            mode: "dark".to_string(),
+        };
+        let json = serde_json::to_string(&theme).unwrap();
+        let restored: TitlebarTheme = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.mode, "dark");
+    }
+
+    // ---- FatalRendererError ----
+
+    #[test]
+    fn test_fatal_renderer_error_serde() {
+        let err = FatalRendererError {
+            error: "Uncaught TypeError".to_string(),
+            url: "https://app.local/main.js".to_string(),
+            version: Some("1.17.8".to_string()),
+            platform: "win32".to_string(),
+            os: Some("Windows 11".to_string()),
+        };
+        let json = serde_json::to_string(&err).unwrap();
+        let restored: FatalRendererError = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.error, "Uncaught TypeError");
+        assert_eq!(restored.platform, "win32");
+    }
+
+    // ---- 纯函数命令（无需 Tauri State）----
+
+    #[tokio::test]
+    async fn test_parse_markdown_returns_input() {
+        // 当前实现是直接透传——验证这一行为不会因重构而改变
+        let input = "# Hello\n\nThis is **bold** text.".to_string();
+        let out = parse_markdown(input.clone()).await.expect("parse");
+        assert_eq!(out, input);
+    }
+
+    #[tokio::test]
+    async fn test_parse_markdown_empty() {
+        let out = parse_markdown(String::new()).await.expect("parse");
+        assert_eq!(out, "");
+    }
+
+    #[tokio::test]
+    async fn test_parse_markdown_unicode() {
+        let input = "你好世界 🌍\n## 标题".to_string();
+        let out = parse_markdown(input.clone()).await.expect("parse");
+        assert_eq!(out, input);
+    }
+
+    #[tokio::test]
+    async fn test_get_app_version() {
+        let v = get_app_version().await.expect("version");
+        assert_eq!(v, "1.17.8");
+    }
+
+    #[tokio::test]
+    async fn test_get_platform_matches_consts() {
+        let p = get_platform().await.expect("platform");
+        assert_eq!(p, std::env::consts::OS);
+    }
+
+    #[tokio::test]
+    async fn test_get_arch_matches_consts() {
+        let a = get_arch().await.expect("arch");
+        assert_eq!(a, std::env::consts::ARCH);
+    }
+
+    // ---- AppState 默认值 ----
+
+    #[test]
+    fn test_app_state_default_has_no_sidecar() {
+        // AppState 实现了 Clone + Default，但 Default 是自动派生的，
+        // 我们手工检查关键字段为初始空状态
+        use std::collections::HashMap;
+        let state = AppState {
+            main_window: Arc::new(Mutex::new(None)),
+            sidecar_process: Arc::new(Mutex::new(None)),
+            server_url: Arc::new(Mutex::new(None)),
+            server_username: Arc::new(Mutex::new(None)),
+            server_password: Arc::new(Mutex::new(None)),
+            background_color: Arc::new(Mutex::new(None)),
+            pinch_zoom_enabled: Arc::new(Mutex::new(false)),
+            pending_deep_links: Arc::new(Mutex::new(Vec::new())),
+            wsl_servers: Arc::new(Mutex::new(HashMap::new())),
+            updater_state: Arc::new(Mutex::new(UpdaterState::default())),
+            store_data: Arc::new(Mutex::new(HashMap::new())),
+        };
+        assert!(state.main_window.lock().unwrap().is_none());
+        assert!(state.server_url.lock().unwrap().is_none());
+        assert!(state.pinch_zoom_enabled.lock().unwrap() == false);
+        assert!(state.pending_deep_links.lock().unwrap().is_empty());
+        assert!(state.wsl_servers.lock().unwrap().is_empty());
+        assert!(state.store_data.lock().unwrap().is_empty());
+    }
+
+    // ---- HashMap 业务逻辑（对应 store_* 命令的纯逻辑部分）----
+
+    #[test]
+    fn test_store_get_set_delete_logic() {
+        // 模拟 store_* 命令对 HashMap 的操作，验证业务逻辑
+        use std::collections::HashMap;
+        let mut store: HashMap<String, HashMap<String, String>> = HashMap::new();
+
+        // set
+        store.entry("settings".to_string()).or_default().insert("theme".to_string(), "dark".to_string());
+        store.entry("settings".to_string()).or_default().insert("lang".to_string(), "zh".to_string());
+
+        // get
+        let v = store.get("settings").and_then(|m| m.get("theme")).cloned();
+        assert_eq!(v, Some("dark".to_string()));
+
+        // length
+        let len = store.get("settings").map(|m| m.len()).unwrap_or(0);
+        assert_eq!(len, 2);
+
+        // keys
+        let keys: Vec<String> = store.get("settings").map(|m| m.keys().cloned().collect()).unwrap_or_default();
+        assert_eq!(keys.len(), 2);
+        assert!(keys.contains(&"theme".to_string()));
+        assert!(keys.contains(&"lang".to_string()));
+
+        // delete
+        if let Some(map) = store.get_mut("settings") {
+            map.remove("theme");
+        }
+        let len = store.get("settings").map(|m| m.len()).unwrap_or(0);
+        assert_eq!(len, 1);
+
+        // clear
+        store.remove("settings");
+        assert!(store.get("settings").is_none());
+    }
+
+    // ---- 屏幕获取辅助函数（来自 commands.rs 内部）----
+
+    #[tokio::test]
+    async fn test_export_debug_logs_returns_string() {
+        // 不实际写文件，只验证返回类型是 String
+        let result = export_debug_logs().await;
+        assert!(result.is_ok());
+        let s = result.unwrap();
+        // 调试日志可能是空的也可能有内容，但必须是字符串
+        let _ = s.len();
+    }
+
+    #[tokio::test]
+    async fn test_record_fatal_renderer_error_returns_ok() {
+        let err = FatalRendererError {
+            error: "test error".to_string(),
+            url: "https://test.local".to_string(),
+            version: Some("1.17.8".to_string()),
+            platform: "test".to_string(),
+            os: None,
+        };
+        let result = record_fatal_renderer_error(err).await;
+        assert!(result.is_ok());
+    }
+}

@@ -11,7 +11,9 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "lint": "oxlint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -30,9 +32,12 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "@solidjs/testing-library": "^0.8.10",
+    "jsdom": "^25.0.1",
     "typescript": "~5.6.2",
     "vite": "^7.1.4",
     "vite-plugin-solid": "^2.11.10",
+    "vitest": "^2.1.9",
     "@types/node": "^24.12.2",
     "oxlint": "^1.60.0",
     "prettier": "^3.6.2"
