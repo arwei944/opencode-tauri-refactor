@@ -232,7 +232,7 @@ fn setup_window_events(
     window.on_window_event(move |event| {
         handle_window_event(
             event.clone(),
-            WebviewWindow::as_ref(&window_ref).window(),
+            &WebviewWindow::as_ref(&window_ref).window(),
             &state_clone,
         );
     });
