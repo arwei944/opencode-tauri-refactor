@@ -434,7 +434,7 @@ mod tests {
         tmp.push(format!("opencode-update-test-{}.json", std::process::id()));
         let _ = std::fs::remove_file(&tmp);
 
-        let mgr = ConfigManager::new();
+        let mut mgr = ConfigManager::new();
         mgr.load(tmp.clone()).expect("load");
 
         // 修改并保存
@@ -445,7 +445,7 @@ mod tests {
         .expect("update");
 
         // 重新加载验证持久化
-        let mgr2 = ConfigManager::new();
+        let mut mgr2 = ConfigManager::new();
         mgr2.load(tmp.clone()).expect("reload");
         let cfg = mgr2.get();
         assert_eq!(cfg.window.width, 1600.0);
@@ -469,7 +469,7 @@ mod tests {
 
     #[test]
     fn test_config_manager_get_sub_configs() {
-        let mgr = ConfigManager::new();
+        let mut mgr = ConfigManager::new();
         mgr.load(env::temp_dir().join("dummy.json")).expect("load");
 
         let server = mgr.get_server_config();

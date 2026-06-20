@@ -1392,7 +1392,7 @@ mod tests {
         };
         assert!(state.main_window.lock().unwrap().is_none());
         assert!(state.server_url.lock().unwrap().is_none());
-        assert!(state.pinch_zoom_enabled.lock().unwrap() == false);
+        assert!(!*state.pinch_zoom_enabled.lock().unwrap());
         assert!(state.pending_deep_links.lock().unwrap().is_empty());
         assert!(state.wsl_servers.lock().unwrap().is_empty());
         assert!(state.store_data.lock().unwrap().is_empty());
