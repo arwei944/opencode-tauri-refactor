@@ -491,7 +491,7 @@ pub async fn open_file_picker(
 
     if multiple {
         let mut builder = window.dialog().file().add_filter("All Files", &["*"]);
-        if let Some(ref title) = opts.as_ref().and_then(|o| o.title.as_ref()) {
+        if let Some(title) = opts.as_ref().and_then(|o| o.title.as_ref()) {
             builder = builder.set_title(title.clone());
         }
         if let Some(ref exts) = extensions {
@@ -527,7 +527,7 @@ pub async fn open_file_picker(
         }))
     } else {
         let mut builder = window.dialog().file();
-        if let Some(ref title) = opts.as_ref().and_then(|o| o.title.as_ref()) {
+        if let Some(title) = opts.as_ref().and_then(|o| o.title.as_ref()) {
             builder = builder.set_title(title.clone());
         }
         if let Some(ref exts) = extensions {

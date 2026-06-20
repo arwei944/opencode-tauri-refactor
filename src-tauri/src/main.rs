@@ -336,24 +336,24 @@ fn setup_environment() {
 /// Set up Linux-specific environment variables
 #[cfg(target_os = "linux")]
 fn setup_linux_environment() {
-    // Ensure XDG directories are set
+    // 确保 XDG 目录已设置
     if env::var("XDG_DATA_HOME").is_err() {
-        if let Some(home) = env::var("HOME").ok() {
+        if let Ok(home) = env::var("HOME") {
             env::set_var("XDG_DATA_HOME", format!("{}/.local/share", home));
         }
     }
     if env::var("XDG_CONFIG_HOME").is_err() {
-        if let Some(home) = env::var("HOME").ok() {
+        if let Ok(home) = env::var("HOME") {
             env::set_var("XDG_CONFIG_HOME", format!("{}/.config", home));
         }
     }
     if env::var("XDG_CACHE_HOME").is_err() {
-        if let Some(home) = env::var("HOME").ok() {
+        if let Ok(home) = env::var("HOME") {
             env::set_var("XDG_CACHE_HOME", format!("{}/.cache", home));
         }
     }
     if env::var("XDG_STATE_HOME").is_err() {
-        if let Some(home) = env::var("HOME").ok() {
+        if let Ok(home) = env::var("HOME") {
             env::set_var("XDG_STATE_HOME", format!("{}/.local/state", home));
         }
     }
