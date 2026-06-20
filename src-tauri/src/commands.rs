@@ -14,7 +14,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_clipboard_manager::ClipboardExt;
-use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_dialog::{DialogExt, FilePath};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_shell::ShellExt;
 
@@ -200,7 +200,11 @@ pub async fn create_new_window(
 ) -> Result<(), String> {
     let label = format!("window-{}", rand::random::<u16>());
     let window =
-        WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.unwrap_or("/".into())))
+        WebviewWindowBuilder::new(
+            &app,
+            &label,
+            WebviewUrl::App(url.unwrap_or_else(|| "/".into()).into()),
+        )
             .title(title.unwrap_or("OpenCode - New Window".to_string()))
             .inner_size(1280.0, 800.0)
             .build()
@@ -470,8 +474,12 @@ pub async fn open_directory_picker(
         }
     }
 
-    let result = builder.pick_folder().map_err(|e| e.to_string())?;
-    Ok(result.map(|p| vec![p.to_string()]))
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<FilePath>>();
+    builder.pick_folder(move |result| {
+        let _ = tx.send(result);
+    });
+    let path = rx.await.map_err(|_| "对话框被取消".to_string())?;
+    Ok(path.map(|p| vec![p.to_string()]))
 }
 
 #[tauri::command]
@@ -488,11 +496,16 @@ pub async fn open_file_picker(
             builder = builder.set_title(title.clone());
         }
         if let Some(ref exts) = extensions {
-            builder = builder.add_filter("Files", exts);
+            let filter_exts: Vec<&str> = exts.iter().map(|s| s.as_str()).collect();
+            builder = builder.add_filter("Files", &filter_exts);
         }
 
-        let result = builder.pick_files().map_err(|e| e.to_string())?;
-        Ok(result.map(|paths| {
+        let (tx, rx) = tokio::sync::oneshot::channel::<Option<Vec<FilePath>>>();
+        builder.pick_files(move |result| {
+            let _ = tx.send(result);
+        });
+        let paths = rx.await.map_err(|_| "对话框被取消".to_string())?;
+        Ok(paths.map(|paths| {
             let token = generate_token();
             let files: Vec<_> = paths
                 .iter()
@@ -519,11 +532,16 @@ pub async fn open_file_picker(
             builder = builder.set_title(title.clone());
         }
         if let Some(ref exts) = extensions {
-            builder = builder.add_filter("Files", exts);
+            let filter_exts: Vec<&str> = exts.iter().map(|s| s.as_str()).collect();
+            builder = builder.add_filter("Files", &filter_exts);
         }
 
-        let result = builder.pick_file().map_err(|e| e.to_string())?;
-        Ok(result.map(|path| {
+        let (tx, rx) = tokio::sync::oneshot::channel::<Option<FilePath>>();
+        builder.pick_file(move |result| {
+            let _ = tx.send(result);
+        });
+        let path = rx.await.map_err(|_| "对话框被取消".to_string())?;
+        Ok(path.map(|path| {
             let token = generate_token();
             let path_str = path.to_string();
             let metadata = std::fs::metadata(&path_str).ok();
@@ -556,8 +574,12 @@ pub async fn save_file_picker(
         }
     }
 
-    let result = builder.save_file().map_err(|e| e.to_string())?;
-    Ok(result.map(|p| p.to_string()))
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<FilePath>>();
+    builder.save_file(move |result| {
+        let _ = tx.send(result);
+    });
+    let path = rx.await.map_err(|_| "对话框被取消".to_string())?;
+    Ok(path.map(|p| p.to_string()))
 }
 
 #[tauri::command]
@@ -625,13 +647,12 @@ pub async fn read_clipboard_image(
 ) -> Result<Option<serde_json::Value>, String> {
     let image = window.clipboard().read_image().map_err(|e| e.to_string())?;
 
-    Ok(image.map(|img| {
-        serde_json::json!({
-            "buffer": img.bytes,
-            "width": img.width,
-            "height": img.height
-        })
-    }))
+    let buffer: Vec<u8> = image.rgba().to_vec();
+    Ok(Some(serde_json::json!({
+        "buffer": buffer,
+        "width": image.width(),
+        "height": image.height()
+    })))
 }
 
 #[tauri::command]

@@ -8,7 +8,9 @@ use std::{
 };
 
 use log::{debug, info};
-use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, PtySystem, SlavePty};
+use portable_pty::{
+    ChildKiller, CommandBuilder, MasterPty, NativePtySystem, PtySize, SlavePty,
+};
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
@@ -66,7 +68,7 @@ pub struct TerminalSize {
 pub struct TerminalManager {
     sessions: Arc<Mutex<HashMap<String, TerminalSession>>>,
     next_id: Arc<Mutex<u64>>,
-    pty_system: portable_pty::PtySystem,
+    pty_system: NativePtySystem,
 }
 
 impl TerminalManager {
