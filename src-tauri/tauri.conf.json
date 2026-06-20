@@ -39,7 +39,6 @@
     "shell": {
       "open": true
     },
-    "dialog": {},
     "fs": {
       "scope": {
         "allow": ["**"],
