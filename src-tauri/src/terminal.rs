@@ -8,9 +8,7 @@ use std::{
 };
 
 use log::{debug, info};
-use portable_pty::{
-    ChildKiller, CommandBuilder, MasterPty, NativePtySystem, PtySize, SlavePty,
-};
+use portable_pty::{ChildKiller, CommandBuilder, MasterPty, NativePtySystem, PtySize, SlavePty};
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
