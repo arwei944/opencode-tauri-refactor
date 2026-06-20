@@ -305,7 +305,9 @@ pub async fn set_window_title(title: String, window: WebviewWindow) -> Result<()
 
 #[tauri::command]
 pub async fn kill_sidecar(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    if let Some(mut child) = state.sidecar_process.lock().unwrap().take() {
+    // 在 await 前释放 MutexGuard（避免跨 await 持有非 Send 类型）
+    let child = state.sidecar_process.lock().unwrap().take();
+    if let Some(mut child) = child {
         child.kill().await.map_err(|e| e.to_string())?;
     }
     *state.server_url.lock().unwrap() = None;
