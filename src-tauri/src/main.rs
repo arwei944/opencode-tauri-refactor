@@ -227,10 +227,10 @@ fn setup_window_events(
     window: WebviewWindow,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let state_clone = app.state::<AppState>().clone();
-    let win_handle = window.window();
+    let w = window.clone();
 
     window.on_window_event(move |event| {
-        handle_window_event(event.clone(), &win_handle, &state_clone);
+        handle_window_event(event.clone(), w.as_ref().as_ref(), &state_clone);
     });
 
     Ok(())

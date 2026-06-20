@@ -9,7 +9,7 @@ use std::{
 
 use log::{debug, info};
 use portable_pty::{
-    ChildKiller, CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem, SlavePty,
+    ChildKiller, CommandBuilder, MasterPty, PtySize, PtySystem, SlavePty,
 };
 use serde::{Deserialize, Serialize};
 
@@ -68,7 +68,7 @@ pub struct TerminalSize {
 pub struct TerminalManager {
     sessions: Arc<Mutex<HashMap<String, TerminalSession>>>,
     next_id: Arc<Mutex<u64>>,
-    pty_system: Box<dyn PtySystem + Send + Sync>,
+    pty_system: Mutex<Box<dyn PtySystem + Send>>,
 }
 
 impl TerminalManager {
@@ -77,7 +77,7 @@ impl TerminalManager {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             next_id: Arc::new(Mutex::new(1)),
-            pty_system: portable_pty::native_pty_system(),
+            pty_system: Mutex::new(portable_pty::native_pty_system()),
         }
     }
 
@@ -119,7 +119,9 @@ impl TerminalManager {
         // 创建 PTY 对
         let pair = self
             .pty_system
-            .open_pty(&size)
+            .lock()
+            .map_err(|e| format!("PTY 系统锁被污染: {}", e))?
+            .openpty(&size)
             .map_err(|e| format!("打开 PTY 失败: {}", e))?;
 
         // 在从 PTY 中生成进程
