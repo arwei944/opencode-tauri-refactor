@@ -212,17 +212,17 @@ pub async fn create_new_window(
 
 #[tauri::command]
 pub async fn get_window_count(app: tauri::AppHandle) -> Result<usize, String> {
-    Ok(app.webviews().len())
+    Ok(app.webview_windows().len())
 }
 
 #[tauri::command]
 pub async fn get_window_focused(window: WebviewWindow) -> Result<bool, String> {
-    Ok(window.is_focused().await)
+    window.is_focused().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn set_window_focus(window: WebviewWindow) -> Result<(), String> {
-    window.set_focus().await.map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -246,7 +246,7 @@ pub async fn close_window(window: WebviewWindow) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn get_zoom_factor(window: WebviewWindow) -> Result<f64, String> {
-    Ok(window.scale_factor().await)
+    window.scale_factor().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -274,7 +274,7 @@ pub async fn set_pinch_zoom_enabled(
 }
 
 #[tauri::command]
-pub async fn set_titlebar_theme(theme: TitlebarTheme, window: WebviewWindow) -> Result<(), String> {
+pub async fn set_titlebar_theme(theme: TitlebarTheme, _window: WebviewWindow) -> Result<(), String> {
     // In Tauri, we would customize window decorations
     // For now, just store the preference
     debug!("Titlebar theme set to: {:?}", theme.mode);
@@ -458,14 +458,14 @@ pub async fn open_directory_picker(
     window: WebviewWindow,
     opts: Option<OpenDirectoryPickerOpts>,
 ) -> Result<Option<Vec<String>>, String> {
-    let mut builder = window.dialog().folder();
+    let mut builder = window.dialog().file();
     if let Some(ref opts) = opts {
         if let Some(ref title) = opts.title {
-            builder = builder.set_title(title);
+            builder = builder.set_title(title.clone());
         }
     }
 
-    let result = builder.pick_folder().await;
+    let result = builder.pick_folder().map_err(|e| e.to_string())?;
     Ok(result.map(|p| vec![p.to_string()]))
 }
 
@@ -480,13 +480,13 @@ pub async fn open_file_picker(
     if multiple {
         let mut builder = window.dialog().file().add_filter("All Files", &["*"]);
         if let Some(ref title) = opts.as_ref().and_then(|o| o.title.as_ref()) {
-            builder = builder.set_title(title);
+            builder = builder.set_title(title.clone());
         }
         if let Some(ref exts) = extensions {
             builder = builder.add_filter("Files", exts);
         }
 
-        let result = builder.pick_files().await;
+        let result = builder.pick_files().map_err(|e| e.to_string())?;
         Ok(result.map(|paths| {
             let token = generate_token();
             let files: Vec<_> = paths
@@ -511,13 +511,13 @@ pub async fn open_file_picker(
     } else {
         let mut builder = window.dialog().file();
         if let Some(ref title) = opts.as_ref().and_then(|o| o.title.as_ref()) {
-            builder = builder.set_title(title);
+            builder = builder.set_title(title.clone());
         }
         if let Some(ref exts) = extensions {
             builder = builder.add_filter("Files", exts);
         }
 
-        let result = builder.pick_file().await;
+        let result = builder.pick_file().map_err(|e| e.to_string())?;
         Ok(result.map(|path| {
             let token = generate_token();
             let path_str = path.to_string();
@@ -544,14 +544,14 @@ pub async fn save_file_picker(
     window: WebviewWindow,
     opts: Option<SaveFilePickerOpts>,
 ) -> Result<Option<String>, String> {
-    let mut builder = window.dialog().file().as_save();
+    let mut builder = window.dialog().file();
     if let Some(ref opts) = opts {
         if let Some(ref title) = opts.title {
-            builder = builder.set_title(title);
+            builder = builder.set_title(title.clone());
         }
     }
 
-    let result = builder.save_file().await;
+    let result = builder.save_file().map_err(|e| e.to_string())?;
     Ok(result.map(|p| p.to_string()))
 }
 
@@ -575,8 +575,7 @@ pub async fn release_picked_files(_token: String) -> Result<(), String> {
 pub async fn open_link(window: WebviewWindow, url: String) -> Result<(), String> {
     window
         .shell()
-        .open(url, None)
-        .await
+        .open(&url, None)
         .map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -613,7 +612,6 @@ pub async fn open_path(
         window
             .shell()
             .open(&path, None)
-            .await
             .map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -626,7 +624,6 @@ pub async fn read_clipboard_image(
     let image = window
         .clipboard()
         .read_image()
-        .await
         .map_err(|e| e.to_string())?;
 
     Ok(image.map(|img| {
@@ -646,7 +643,10 @@ pub async fn show_notification(
 ) -> Result<(), String> {
     window
         .notification()
-        .show(&title, body.as_deref(), None)
+        .builder()
+        .title(&title)
+        .body(body.as_deref().unwrap_or(""))
+        .show()
         .map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -792,34 +792,43 @@ pub async fn updater_unsubscribe(_window: WebviewWindow) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn updater_check(state: tauri::State<'_, AppState>) -> Result<UpdaterState, String> {
-    let mut updater_state = state.updater_state.lock().unwrap();
+    // 在 await 前释放 MutexGuard
+    {
+        let mut updater_state = state.updater_state.lock().unwrap();
+        updater_state.status = "checking".to_string();
+        updater_state.message = Some("Checking for updates...".to_string());
+    }
 
-    // Mock implementation - in production, check for updates
-    updater_state.status = "checking".to_string();
-    updater_state.message = Some("Checking for updates...".to_string());
-
-    // Simulate check
+    // 模拟检查（此时 MutexGuard 已释放）
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    updater_state.status = "up-to-date".to_string();
-    updater_state.message = Some("No updates available".to_string());
+    let result = {
+        let mut updater_state = state.updater_state.lock().unwrap();
+        updater_state.status = "up-to-date".to_string();
+        updater_state.message = Some("No updates available".to_string());
+        updater_state.clone()
+    };
 
-    Ok(updater_state.clone())
+    Ok(result)
 }
 
 #[tauri::command]
 pub async fn updater_install(state: tauri::State<'_, AppState>) -> Result<(), String> {
-    let mut updater_state = state.updater_state.lock().unwrap();
-
-    if updater_state.status != "ready" {
-        return Err("Update is not ready to install".to_string());
+    // 在 await 前释放 MutexGuard
+    {
+        let updater_state = state.updater_state.lock().unwrap();
+        if updater_state.status != "ready" {
+            return Err("Update is not ready to install".to_string());
+        }
     }
 
-    updater_state.status = "installing".to_string();
-    updater_state.message = Some("Installing update...".to_string());
+    {
+        let mut updater_state = state.updater_state.lock().unwrap();
+        updater_state.status = "installing".to_string();
+        updater_state.message = Some("Installing update...".to_string());
+    }
 
-    // In production, trigger the update installation
-    // For now, just simulate
+    // 模拟安装（此时 MutexGuard 已释放）
     tokio::time::sleep(Duration::from_secs(2)).await;
 
     // Restart the application
@@ -915,14 +924,13 @@ pub async fn wsl_servers_refresh_distros() -> Result<Vec<WslDistroInfo>, String>
 }
 
 #[tauri::command]
-pub async fn wsl_servers_install_wsl(window: WebviewWindow) -> Result<(), String> {
+pub async fn wsl_servers_install_wsl(_window: WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         // Open Microsoft Store to install WSL
-        window
+        _window
             .shell()
             .open("ms-windows-store://pdp/?ProductId=9P9TQF7MRM4R", None)
-            .await
             .map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -934,13 +942,13 @@ pub async fn wsl_servers_install_wsl(window: WebviewWindow) -> Result<(), String
 }
 
 #[tauri::command]
-pub async fn wsl_servers_probe_distro(name: String) -> Result<serde_json::Value, String> {
+pub async fn wsl_servers_probe_distro(_name: String) -> Result<serde_json::Value, String> {
     #[cfg(target_os = "windows")]
     {
         // Check if specific distro exists
         let output = std::process::Command::new("wsl")
             .arg("-d")
-            .arg(&name)
+            .arg(&_name)
             .arg("--exec")
             .arg("echo")
             .arg("probed")
@@ -950,14 +958,14 @@ pub async fn wsl_servers_probe_distro(name: String) -> Result<serde_json::Value,
         if output.status.success() {
             return Ok(serde_json::json!({
                 "available": true,
-                "distro": name,
+                "distro": _name,
                 "message": "Distro is accessible"
             }));
         }
 
         return Ok(serde_json::json!({
             "available": false,
-            "distro": name,
+            "distro": _name,
             "error": String::from_utf8(output.stderr).unwrap_or_default()
         }));
     }
@@ -969,10 +977,10 @@ pub async fn wsl_servers_probe_distro(name: String) -> Result<serde_json::Value,
 }
 
 #[tauri::command]
-pub async fn wsl_servers_install_distro(name: String) -> Result<(), String> {
+pub async fn wsl_servers_install_distro(_name: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        warn!("Installing WSL distro: {}", name);
+        warn!("Installing WSL distro: {}", _name);
         // In production, this would use wsl --install -d <name>
         // For now, just log
         Ok(())
@@ -985,12 +993,12 @@ pub async fn wsl_servers_install_distro(name: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn wsl_servers_open_terminal(name: String) -> Result<(), String> {
+pub async fn wsl_servers_open_terminal(_name: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("wsl")
             .arg("-d")
-            .arg(&name)
+            .arg(&_name)
             .spawn()
             .map_err(|e| e.to_string())?;
         Ok(())
@@ -1045,7 +1053,7 @@ pub async fn wsl_servers_start_server(
 // ============================================================================
 
 #[tauri::command]
-pub async fn create_desktop_menu(window: WebviewWindow) -> Result<(), String> {
+pub async fn create_desktop_menu(_window: WebviewWindow) -> Result<(), String> {
     // In Tauri, menus are created differently
     // For now, just log
     debug!("Creating desktop menu...");
